@@ -2,6 +2,12 @@
   "expo": {
     "name": "SakanArbab",
     "slug": "SakanArbab",
+    "extra": {
+      "eas": {
+        "projectId": "870732e3-0909-47b7-8f63-2bc47f0f8c10"
+      }
+    },
+    "scheme": "sakanarbab",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -20,10 +26,17 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.asaddimtimkar.SakanArbab"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-sqlite",
+      "expo-secure-store",
+      "expo-web-browser"
+    ],
+    "owner": "asaddimtimkar"
   }
 }
