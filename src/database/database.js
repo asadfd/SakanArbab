@@ -278,6 +278,18 @@ export function getBedById(id) {
   return db.getFirstSync(`SELECT * FROM bed_units WHERE id = ?`, [id]);
 }
 
+export function getAvailableBeds() {
+  return db.getAllSync(
+    `SELECT bu.*, r.name AS room_name, p.name AS property_name
+     FROM bed_units bu
+     JOIN rooms r ON r.id = bu.room_id
+     JOIN properties p ON p.id = r.property_id
+     WHERE bu.status = 'AVAILABLE'
+     ORDER BY p.name ASC, r.name ASC, bu.bed_label ASC`,
+    []
+  );
+}
+
 export function insertBed(data) {
   const { room_id, bed_label, status, owner_rent, actual_rent, commission } = data;
   return db.runSync(
