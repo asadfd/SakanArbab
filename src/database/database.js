@@ -327,6 +327,23 @@ export function getAllContracts(status) {
   return db.getAllSync(`SELECT * FROM tenancy_contracts ORDER BY created_at DESC`);
 }
 
+export function getAllContractsWithDetails(status) {
+  const where = status ? `WHERE tc.status = '${status}'` : '';
+  return db.getAllSync(
+    `SELECT tc.*,
+            bu.bed_label,
+            r.name  AS room_name,
+            p.name  AS property_name
+     FROM tenancy_contracts tc
+     LEFT JOIN bed_units bu ON bu.id = tc.bed_unit_id
+     LEFT JOIN rooms r      ON r.id  = bu.room_id
+     LEFT JOIN properties p ON p.id  = r.property_id
+     ${where}
+     ORDER BY tc.created_at DESC`,
+    []
+  );
+}
+
 export function getContractById(id) {
   return db.getFirstSync(`SELECT * FROM tenancy_contracts WHERE id = ?`, [id]);
 }
