@@ -404,6 +404,27 @@ export function getAllPayments() {
   return db.getAllSync(`SELECT * FROM payments ORDER BY payment_date DESC`);
 }
 
+export function getAllPaymentsWithDetails() {
+  return db.getAllSync(
+    `SELECT p.*,
+            tc.tenant_name,
+            tc.tenant_email,
+            bu.bed_label,
+            r.name  AS room_name,
+            r.id    AS room_id,
+            prop.name AS property_name,
+            a.full_name AS agent_name
+     FROM payments p
+     LEFT JOIN tenancy_contracts tc ON tc.id = p.tenancy_id
+     LEFT JOIN bed_units bu         ON bu.id = p.bed_unit_id
+     LEFT JOIN rooms r              ON r.id  = bu.room_id
+     LEFT JOIN properties prop      ON prop.id = r.property_id
+     LEFT JOIN agents a             ON a.id  = p.agent_id
+     ORDER BY p.created_at DESC`,
+    []
+  );
+}
+
 export function getPaymentsByTenancy(tenancyId) {
   return db.getAllSync(
     `SELECT * FROM payments WHERE tenancy_id = ? ORDER BY payment_date DESC`,
