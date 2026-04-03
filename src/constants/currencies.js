@@ -1,0 +1,16 @@
+export const CURRENCIES = [
+  { code: 'AED', name: 'UAE Dirham' },
+  { code: 'SAR', name: 'Saudi Riyal' },
+  { code: 'QAR', name: 'Qatari Riyal' },
+  { code: 'KWD', name: 'Kuwaiti Dinar' },
+  { code: 'BHD', name: 'Bahraini Dinar' },
+  { code: 'OMR', name: 'Omani Rial' },
+  { code: 'USD', name: 'US Dollar' },
+  { code: 'EUR', name: 'Euro' },
+  { code: 'GBP', name: 'British Pound' },
+  { code: 'INR', name: 'Indian Rupee' },
+  { code: 'PKR', name: 'Pakistani Rupee' },
+  { code: 'EGP', name: 'Egyptian Pound' },
+  { code: 'JOD', name: 'Jordanian Dinar' },
+  { code: 'OTHER', name: 'Other' },
+];
