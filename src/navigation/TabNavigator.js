@@ -55,6 +55,7 @@ function PropertiesStack() {
       <S.Screen name="RoomDetailScreen" component={RoomDetailScreen} />
       <S.Screen name="BedUnitDetailScreen" component={BedUnitDetailScreen} />
       <S.Screen name="CreateContractScreen" component={CreateContractScreen} />
+      <S.Screen name="ContractDetailScreen" component={ContractDetailScreen} />
     </S.Navigator>
   );
 }

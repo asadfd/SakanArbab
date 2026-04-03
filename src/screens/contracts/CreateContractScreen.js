@@ -173,18 +173,24 @@ export default function CreateContractScreen({ navigation, route }) {
   const [statusMsg, setStatusMsg] = useState('');
   const [currency, setCurrency]   = useState('AED');
   const [agent, setAgent]         = useState(null);
+  const [loadError, setLoadError] = useState(null);
 
   // ─── Load agent + available beds on mount ───────────────────────────────────
 
   useEffect(() => {
-    const a = getAgent();
-    setAgent(a);
-    setCurrency(a?.currency ?? 'AED');
+    try {
+      const a = getAgent();
+      setAgent(a);
+      setCurrency(a?.currency ?? 'AED');
 
-    if (!routeBedId) {
-      const beds = getAvailableBeds();
-      setAvailableBeds(beds);
-      if (beds.length > 0) setSelectedBedId(beds[0].id);
+      if (!routeBedId) {
+        const beds = getAvailableBeds();
+        setAvailableBeds(beds ?? []);
+        if (beds && beds.length > 0) setSelectedBedId(beds[0].id);
+      }
+    } catch (err) {
+      console.error('[CreateContractScreen] init error:', err);
+      setLoadError(err.message ?? 'Failed to load data');
     }
   }, []);
 
@@ -192,13 +198,18 @@ export default function CreateContractScreen({ navigation, route }) {
 
   useEffect(() => {
     if (!selectedBedId) { setBed(null); setRoom(null); setProperty(null); return; }
-    const b = getBedById(selectedBedId);
-    setBed(b);
-    if (b) {
-      const r = getRoomById(b.room_id);
-      setRoom(r);
-      setProperty(r ? getPropertyById(r.property_id) : null);
-      setMonthlyRent(b.actual_rent != null ? String(b.actual_rent) : '');
+    try {
+      const b = getBedById(selectedBedId);
+      setBed(b);
+      if (b) {
+        const r = getRoomById(b.room_id);
+        setRoom(r);
+        setProperty(r ? getPropertyById(r.property_id) : null);
+        setMonthlyRent(b.actual_rent != null ? String(b.actual_rent) : '');
+      }
+    } catch (err) {
+      console.error('[CreateContractScreen] bed load error:', err);
+      setLoadError(err.message ?? 'Failed to load bed details');
     }
   }, [selectedBedId]);
 
@@ -206,6 +217,7 @@ export default function CreateContractScreen({ navigation, route }) {
 
   function validate() {
     const e = {};
+    if (!agent?.id)                       e.agent = 'Agent profile not found. Go to Settings → Edit Business Profile first.';
     if (!selectedBedId)                   e.bed = 'Please select a bed';
     if (!tenantName.trim())               e.tenantName = 'Tenant name is required';
     if (!tenantEmail.trim())              e.tenantEmail = 'Email is required (for PDF delivery)';
@@ -344,6 +356,22 @@ export default function CreateContractScreen({ navigation, route }) {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
+
+          {/* ── Error Banner ─────────────────────────────────────────────── */}
+          {loadError ? (
+            <View style={styles.errorBanner}>
+              <MaterialCommunityIcons name="alert-circle" size={18} color="#E24B4A" />
+              <Text style={styles.errorBannerText}>{loadError}</Text>
+            </View>
+          ) : null}
+
+          {/* ── Agent Warning ────────────────────────────────────────────── */}
+          {errors.agent ? (
+            <View style={styles.errorBanner}>
+              <MaterialCommunityIcons name="alert-circle" size={18} color="#E24B4A" />
+              <Text style={styles.errorBannerText}>{errors.agent}</Text>
+            </View>
+          ) : null}
 
           {/* ── Bed Selection ─────────────────────────────────────────────── */}
           <View style={styles.card}>
@@ -617,6 +645,19 @@ const styles = StyleSheet.create({
   inputError: { borderColor: '#E24B4A' },
   errorText:  { color: '#E24B4A', fontSize: 12, marginTop: -12, marginBottom: 12 },
   helperText: { fontSize: 12, color: '#888780', marginTop: -12, marginBottom: 16 },
+
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FCEBEB',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E24B4A',
+  },
+  errorBannerText: { color: '#E24B4A', fontSize: 13, fontWeight: '600', flex: 1 },
 
   pickerWrapper: {
     borderWidth: 1,
