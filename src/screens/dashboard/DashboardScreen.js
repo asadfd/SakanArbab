@@ -170,20 +170,6 @@ export default function DashboardScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* ── Overdue Banner ── */}
-      {overdueList.length > 0 && (
-        <TouchableOpacity
-          style={styles.overdueBanner}
-          onPress={() => navigation.navigate('OverdueScreen')}
-          activeOpacity={0.85}
-        >
-          <MaterialCommunityIcons name="alert" size={18} color="#FFFFFF" />
-          <Text style={styles.overdueText}>
-            {' '}{overdueList.length} tenant{overdueList.length > 1 ? 's' : ''} overdue — Tap to view
-          </Text>
-        </TouchableOpacity>
-      )}
-
       {/* ── Stats Cards ── */}
       <View style={styles.statsGrid}>
         <View style={styles.statsRow}>
@@ -358,20 +344,6 @@ const styles = StyleSheet.create({
   bellBtn: {
     padding: 4,
     marginLeft: 8,
-  },
-
-  // Overdue banner
-  overdueBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E24B4A',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  overdueText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
   },
 
   // Stats grid
