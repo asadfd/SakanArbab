@@ -24,6 +24,7 @@ import {
   insertContract,
   updateBedStatus,
   insertEmailLog,
+  generatePendingPayments,
 } from '../../database/database';
 import { generateContractPDF } from '../../services/pdfService';
 import { sendContractEmail } from '../../services/emailService';
@@ -259,6 +260,9 @@ export default function CreateContractScreen({ navigation, route }) {
 
       // 2. Mark bed as OCCUPIED
       updateBedStatus(selectedBedId, 'OCCUPIED');
+
+      // 3. Generate pending payment records for each month
+      generatePendingPayments(contractId);
 
       const contractData = {
         id:              contractId,

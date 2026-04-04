@@ -25,6 +25,8 @@ import {
   insertPayment,
   insertEmailLog,
   getAgent,
+  getPendingPaymentForMonth,
+  updatePaymentToPaid,
 } from '../../database/database';
 import { generateReceiptPDF } from '../../services/pdfService';
 import { sendReceiptEmail } from '../../services/emailService';
@@ -336,7 +338,9 @@ export default function LogPaymentScreen({ navigation, route }) {
     setStatusMsg('Saving payment...');
 
     try {
-      // 1. Insert payment
+      // 1. Check if a PENDING payment already exists for this contract+month
+      const existingPending = getPendingPaymentForMonth(contract.id, paymentForMonth);
+
       const paymentData = {
         tenancy_id:        contract.id,
         bed_unit_id:       contract.bed_unit_id,
@@ -349,7 +353,19 @@ export default function LogPaymentScreen({ navigation, route }) {
         status:            paymentStatus,
         notes:             notes.trim() || null,
       };
-      insertPayment(paymentData);
+
+      if (existingPending) {
+        // Update the existing PENDING payment instead of creating a duplicate
+        updatePaymentToPaid(existingPending.id, {
+          txn_no:       txnNo.trim(),
+          amount:       parseFloat(amount),
+          payment_date: paymentDate,
+          payment_mode: paymentMode,
+          notes:        notes.trim() || null,
+        });
+      } else {
+        insertPayment(paymentData);
+      }
 
       // 2. Generate receipt PDF
       setStatusMsg('Generating receipt...');

@@ -17,6 +17,7 @@ import {
   getPaymentsThisMonth,
   getOverdueTenants,
   getContractById,
+  ensureMonthlyPayments,
 } from '../../database/database';
 import db from '../../database/database';
 
@@ -52,6 +53,9 @@ function formatDate(dateStr) {
 // ─── Data loader ─────────────────────────────────────────────────────────────
 
 function loadDashboardData() {
+  // Auto-generate pending payments for all active contracts up to current month
+  ensureMonthlyPayments();
+
   const agent = getAgent();
 
   const totalBeds = db.getFirstSync(`SELECT COUNT(*) AS c FROM bed_units`)?.c ?? 0;

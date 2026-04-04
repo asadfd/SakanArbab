@@ -3,12 +3,17 @@ import {
   View,
   Text,
   TouchableOpacity,
+  TextInput,
   ScrollView,
+  Modal,
   Alert,
   Linking,
   StyleSheet,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -20,6 +25,9 @@ import {
   getOverdueTenants,
   endContract,
   getAgent,
+  canEndContract,
+  updatePaymentToPaid,
+  checkTxnExists,
 } from '../../database/database';
 import { generateContractPDF } from '../../services/pdfService';
 import { sendContractEmail } from '../../services/emailService';
@@ -171,6 +179,12 @@ export default function ContractDetailScreen({ navigation, route }) {
   // ─── End tenancy ─────────────────────────────────────────────────────────────
 
   function handleEndTenancy() {
+    const check = canEndContract(contractId);
+    if (!check.allowed) {
+      Alert.alert('Cannot End Tenancy', check.reason);
+      return;
+    }
+
     Alert.alert(
       'End Tenancy',
       `End tenancy for ${contract?.tenant_name}? This will set the bed to Available.`,
@@ -188,6 +202,54 @@ export default function ContractDetailScreen({ navigation, route }) {
         },
       ]
     );
+  }
+
+  // ─── Edit pending payment ───────────────────────────────────────────────────
+
+  const [editPayment, setEditPayment]     = useState(null);
+  const [editTxn, setEditTxn]             = useState('');
+  const [editAmount, setEditAmount]       = useState('');
+  const [editDate, setEditDate]           = useState('');
+  const [editMode, setEditMode]           = useState('CASH');
+  const [editNotes, setEditNotes]         = useState('');
+  const [editError, setEditError]         = useState('');
+  const [editSaving, setEditSaving]       = useState(false);
+
+  function openEditPayment(payment) {
+    setEditPayment(payment);
+    setEditTxn('');
+    setEditAmount(String(payment.amount ?? ''));
+    const today = new Date();
+    setEditDate(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`);
+    setEditMode('CASH');
+    setEditNotes('');
+    setEditError('');
+  }
+
+  function handleSavePayment() {
+    const txn = editTxn.trim();
+    if (!txn) { setEditError('Transaction number is required'); return; }
+    if (checkTxnExists(txn)) { setEditError('Transaction number already exists'); return; }
+    const amt = parseFloat(editAmount);
+    if (!editAmount || isNaN(amt) || amt <= 0) { setEditError('Amount must be greater than 0'); return; }
+    if (!editDate) { setEditError('Payment date is required'); return; }
+
+    setEditSaving(true);
+    try {
+      updatePaymentToPaid(editPayment.id, {
+        txn_no: txn,
+        amount: amt,
+        payment_date: editDate,
+        payment_mode: editMode,
+        notes: editNotes.trim() || null,
+      });
+      setEditPayment(null);
+      load();
+    } catch (err) {
+      setEditError(err.message ?? 'Failed to update payment');
+    } finally {
+      setEditSaving(false);
+    }
   }
 
   // ─── Render ──────────────────────────────────────────────────────────────────
@@ -306,8 +368,19 @@ export default function ContractDetailScreen({ navigation, route }) {
           <Text style={styles.emptyText}>No payments recorded yet.</Text>
         ) : (
           payments.map((p) => (
-            <PaymentRow key={p.id} payment={p} currency={currency} />
+            <TouchableOpacity
+              key={p.id}
+              activeOpacity={p.status === 'PENDING' ? 0.7 : 1}
+              onPress={() => p.status === 'PENDING' && isActive && openEditPayment(p)}
+            >
+              <PaymentRow payment={p} currency={currency} />
+            </TouchableOpacity>
           ))
+        )}
+
+        {/* Hint for pending payments */}
+        {isActive && payments.some((p) => p.status === 'PENDING') && (
+          <Text style={styles.pendingHint}>Tap a PENDING payment to mark it as PAID</Text>
         )}
 
         {/* Action buttons — ACTIVE only */}
@@ -342,6 +415,98 @@ export default function ContractDetailScreen({ navigation, route }) {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* ── Edit Payment Modal ─────────────────────────────────────────── */}
+      <Modal visible={!!editPayment} animationType="slide" transparent onRequestClose={() => setEditPayment(null)}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setEditPayment(null)} />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Record Payment</Text>
+            {editPayment && (
+              <Text style={styles.modalSubtitle}>
+                For: {editPayment.payment_for_month}  ·  {fmtAmount(editPayment.amount, currency)}
+              </Text>
+            )}
+
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {editError ? (
+                <View style={styles.editErrorBanner}>
+                  <Text style={styles.editErrorText}>{editError}</Text>
+                </View>
+              ) : null}
+
+              <Text style={styles.modalLabel}>Transaction No. <Text style={styles.required}>*</Text></Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editTxn}
+                onChangeText={(v) => { setEditTxn(v); setEditError(''); }}
+                placeholder="e.g. TXN-001"
+                placeholderTextColor="#AAAAAA"
+                autoCapitalize="characters"
+              />
+
+              <Text style={styles.modalLabel}>Amount ({currency}) <Text style={styles.required}>*</Text></Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editAmount}
+                onChangeText={(v) => { setEditAmount(v); setEditError(''); }}
+                placeholder="0.00"
+                placeholderTextColor="#AAAAAA"
+                keyboardType="decimal-pad"
+              />
+
+              <Text style={styles.modalLabel}>Payment Date <Text style={styles.required}>*</Text></Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editDate}
+                onChangeText={(v) => { setEditDate(v); setEditError(''); }}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor="#AAAAAA"
+              />
+
+              <Text style={styles.modalLabel}>Payment Mode</Text>
+              <View style={styles.pickerWrapper}>
+                <Picker
+                  selectedValue={editMode}
+                  onValueChange={setEditMode}
+                  style={styles.picker}
+                  dropdownIconColor="#26215C"
+                >
+                  <Picker.Item label="Cash" value="CASH" />
+                  <Picker.Item label="UPI" value="UPI" />
+                  <Picker.Item label="Bank Transfer" value="BANK" />
+                  <Picker.Item label="Cheque" value="CHEQUE" />
+                </Picker>
+              </View>
+
+              <Text style={styles.modalLabel}>Notes</Text>
+              <TextInput
+                style={[styles.modalInput, { minHeight: 60, textAlignVertical: 'top' }]}
+                value={editNotes}
+                onChangeText={setEditNotes}
+                placeholder="Optional notes..."
+                placeholderTextColor="#AAAAAA"
+                multiline
+              />
+
+              <TouchableOpacity
+                style={[styles.savePaymentBtn, editSaving && styles.btnDisabled]}
+                onPress={handleSavePayment}
+                disabled={editSaving}
+                activeOpacity={0.85}
+              >
+                {editSaving ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.savePaymentBtnText}>Mark as PAID</Text>
+                )}
+              </TouchableOpacity>
+              <View style={{ height: 24 }} />
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -494,4 +659,45 @@ const styles = StyleSheet.create({
   },
   endBtnText:  { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   btnDisabled: { opacity: 0.6 },
+
+  pendingHint: { fontSize: 12, color: '#BA7517', textAlign: 'center', marginTop: 2, marginBottom: 10 },
+
+  // ─── Edit Payment Modal ──────────────────────────────────────────
+  modalOverlay:  { flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
+  modalSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '85%',
+  },
+  modalHandle: {
+    width: 40, height: 4, backgroundColor: '#E0E0E0',
+    borderRadius: 2, alignSelf: 'center', marginBottom: 16,
+  },
+  modalTitle:    { fontSize: 18, fontWeight: 'bold', color: '#1A1A2E', marginBottom: 4 },
+  modalSubtitle: { fontSize: 13, color: '#888780', marginBottom: 16 },
+  modalLabel:    { fontSize: 13, fontWeight: '600', color: '#1A1A2E', marginBottom: 6 },
+  required:      { color: '#E24B4A' },
+  modalInput: {
+    borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8,
+    paddingHorizontal: 14, paddingVertical: 11, fontSize: 15,
+    color: '#1A1A2E', backgroundColor: '#F8F8F8', marginBottom: 16,
+  },
+  pickerWrapper: {
+    borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8,
+    backgroundColor: '#F8F8F8', overflow: 'hidden', marginBottom: 16,
+  },
+  picker: { color: '#1A1A2E', height: 50 },
+  editErrorBanner: {
+    backgroundColor: '#FCEBEB', borderRadius: 8, padding: 10, marginBottom: 14,
+    borderWidth: 1, borderColor: '#E24B4A',
+  },
+  editErrorText: { color: '#E24B4A', fontSize: 13, fontWeight: '600' },
+  savePaymentBtn: {
+    backgroundColor: '#1D9E75', borderRadius: 10,
+    paddingVertical: 15, alignItems: 'center', marginTop: 4,
+  },
+  savePaymentBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 });

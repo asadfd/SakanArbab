@@ -398,6 +398,135 @@ export function getActiveContracts() {
   );
 }
 
+// ─── PAYMENT GENERATION ─────────────────────────────────────────────────────
+
+/**
+ * Generate PENDING payment rows from check-in month through current month
+ * for a given contract. Skips months that already have a payment record.
+ */
+export function generatePendingPayments(contractId) {
+  const contract = getContractById(contractId);
+  if (!contract) return;
+
+  const agent = getAgent();
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  // Start from check-in month
+  const start = new Date(contract.check_in_date + 'T00:00:00');
+  let year = start.getFullYear();
+  let month = start.getMonth(); // 0-based
+
+  while (true) {
+    const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+    if (monthKey > currentMonth) break;
+
+    // If contract has check-out and this month is past it, stop
+    if (contract.check_out_date) {
+      const endMonth = contract.check_out_date.substring(0, 7);
+      if (monthKey > endMonth) break;
+    }
+
+    // Check if payment already exists for this month
+    const existing = db.getFirstSync(
+      `SELECT id FROM payments WHERE tenancy_id = ? AND payment_for_month = ? LIMIT 1`,
+      [contractId, monthKey]
+    );
+
+    if (!existing) {
+      const txn = `AUTO-${contractId}-${monthKey}`;
+      db.runSync(
+        `INSERT INTO payments
+           (tenancy_id, bed_unit_id, agent_id, txn_no, amount,
+            payment_date, payment_mode, payment_for_month, status, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)`,
+        [
+          contractId,
+          contract.bed_unit_id,
+          agent?.id ?? contract.agent_id,
+          txn,
+          contract.monthly_rent,
+          `${monthKey}-${String(contract.payment_due_day ?? 1).padStart(2, '0')}`,
+          null,
+          monthKey,
+          'Auto-generated pending payment',
+        ]
+      );
+    }
+
+    // Next month
+    month++;
+    if (month > 11) { month = 0; year++; }
+  }
+}
+
+/**
+ * For ALL active contracts, ensure pending payments exist up to current month.
+ * Called on app load / dashboard focus.
+ */
+export function ensureMonthlyPayments() {
+  const activeContracts = getActiveContracts();
+  for (const c of activeContracts) {
+    generatePendingPayments(c.id);
+  }
+}
+
+/**
+ * Check if a contract can be ended.
+ * Rule: last 3 months' payments must be PAID. If contract is shorter than 3 months,
+ * ALL payments must be PAID.
+ */
+export function canEndContract(contractId) {
+  const payments = db.getAllSync(
+    `SELECT payment_for_month, status FROM payments
+     WHERE tenancy_id = ?
+     ORDER BY payment_for_month DESC`,
+    [contractId]
+  );
+
+  if (payments.length === 0) {
+    return { allowed: false, reason: 'No payment records found. At least one payment must be logged and marked PAID.' };
+  }
+
+  const checkCount = Math.min(3, payments.length);
+  const recentPayments = payments.slice(0, checkCount);
+
+  const unpaid = recentPayments.filter((p) => p.status !== 'PAID');
+  if (unpaid.length > 0) {
+    const months = unpaid.map((p) => p.payment_for_month).join(', ');
+    return {
+      allowed: false,
+      reason: `${unpaid.length} payment(s) not yet PAID (${months}). All recent payments must be PAID before ending the contract.`,
+    };
+  }
+
+  return { allowed: true, reason: null };
+}
+
+/**
+ * Find existing PENDING payment for a contract+month.
+ * Returns the payment row or null.
+ */
+export function getPendingPaymentForMonth(tenancyId, monthKey) {
+  return db.getFirstSync(
+    `SELECT * FROM payments WHERE tenancy_id = ? AND payment_for_month = ? AND status = 'PENDING' LIMIT 1`,
+    [tenancyId, monthKey]
+  );
+}
+
+/**
+ * Update a PENDING payment to PAID with transaction details.
+ */
+export function updatePaymentToPaid(paymentId, data) {
+  const { txn_no, amount, payment_date, payment_mode, notes } = data;
+  return db.runSync(
+    `UPDATE payments
+     SET txn_no = ?, amount = ?, payment_date = ?, payment_mode = ?, status = 'PAID', notes = ?
+     WHERE id = ? AND status = 'PENDING'`,
+    [txn_no, amount, payment_date, payment_mode ?? null, notes ?? null, paymentId]
+  );
+}
+
 // ─── PAYMENTS ────────────────────────────────────────────────────────────────
 
 export function getAllPayments() {
