@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Alert, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 
@@ -28,6 +28,24 @@ export default function SettingsScreen({ navigation }) {
     navigation.getParent()?.getParent()?.replace('Auth');
   }
 
+  function handleSignOut() {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out? You will need to enter your PIN to access the app again.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            await SecureStore.deleteItemAsync('app_pin');
+            navigation.getParent()?.getParent()?.replace('Auth');
+          },
+        },
+      ]
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -35,6 +53,16 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={styles.sectionLabel}>ACCOUNT</Text>
+        <MenuItem
+          icon="domain"
+          color="#26215C"
+          bg="#EEEDFE"
+          label="Business Profile"
+          subtitle="Edit your business details & logo"
+          onPress={() => navigation.navigate('BusinessProfileScreen')}
+        />
+
         <Text style={styles.sectionLabel}>REPORTS</Text>
         <MenuItem
           icon="chart-bar"
@@ -64,24 +92,28 @@ export default function SettingsScreen({ navigation }) {
         />
 
         <Text style={styles.sectionLabel}>SECURITY</Text>
-        <TouchableOpacity style={styles.menuItem} onPress={handleLock} activeOpacity={0.7}>
-          <View style={[styles.menuIcon, { backgroundColor: '#EEEDFE' }]}>
-            <MaterialCommunityIcons name="lock-outline" size={20} color="#26215C" />
-          </View>
-          <View style={styles.menuText}>
-            <Text style={styles.menuLabel}>Lock App</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={20} color="#C0BFBA" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.menuItem} onPress={handleResetPin} activeOpacity={0.7}>
-          <View style={[styles.menuIcon, { backgroundColor: '#FCEBEB' }]}>
-            <MaterialCommunityIcons name="lock-reset" size={20} color="#E24B4A" />
-          </View>
-          <View style={styles.menuText}>
-            <Text style={styles.menuLabel}>Reset PIN</Text>
-            <Text style={styles.menuSub}>You will need to set a new PIN</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={20} color="#C0BFBA" />
+        <MenuItem
+          icon="lock-outline"
+          color="#26215C"
+          bg="#EEEDFE"
+          label="Lock App"
+          subtitle="Lock without signing out"
+          onPress={handleLock}
+        />
+        <MenuItem
+          icon="lock-reset"
+          color="#BA7517"
+          bg="#FEF3C7"
+          label="Reset PIN"
+          subtitle="You will need to set a new PIN"
+          onPress={handleResetPin}
+        />
+
+        <View style={{ height: 16 }} />
+
+        <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut} activeOpacity={0.8}>
+          <MaterialCommunityIcons name="logout" size={20} color="#E24B4A" />
+          <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -129,4 +161,20 @@ const styles = StyleSheet.create({
   menuText: { flex: 1 },
   menuLabel: { fontSize: 15, fontWeight: '600', color: '#1A1A2E' },
   menuSub: { fontSize: 12, color: '#888780', marginTop: 2 },
+  signOutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FCEBEB',
+    borderRadius: 12,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#E24B4A',
+  },
+  signOutText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#E24B4A',
+  },
 });

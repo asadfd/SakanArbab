@@ -26,111 +26,282 @@ function fmtMonth(yyyymm) {
   return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
-// ─── Shared header HTML ───────────────────────────────────────────────────────
+function todayFormatted() {
+  const d = new Date();
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+}
+
+// ─── Shared styles ───────────────────────────────────────────────────────────
+
+const baseStyles = `
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    color: #1A1A2E;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .page {
+    padding: 0;
+  }
+
+  /* ── Header Banner ── */
+  .header-banner {
+    background: #26215C;
+    padding: 28px 36px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .header-logo {
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    object-fit: cover;
+    border: 2px solid rgba(255,255,255,0.2);
+  }
+  .header-biz-name {
+    font-size: 20px;
+    font-weight: 800;
+    color: #FFFFFF;
+    margin: 0;
+  }
+  .header-tagline {
+    font-size: 11px;
+    color: rgba(255,255,255,0.6);
+    margin: 2px 0 0;
+  }
+  .header-trn {
+    font-size: 10px;
+    color: rgba(255,255,255,0.45);
+    margin: 2px 0 0;
+  }
+  .header-right {
+    text-align: right;
+    font-size: 11px;
+    color: rgba(255,255,255,0.7);
+    line-height: 1.8;
+  }
+
+  /* ── Document Title ── */
+  .doc-title-bar {
+    background: #F0F0FA;
+    padding: 14px 36px;
+    border-bottom: 2px solid #26215C;
+  }
+  .doc-title {
+    font-size: 16px;
+    font-weight: 800;
+    color: #26215C;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin: 0;
+  }
+  .doc-subtitle {
+    font-size: 11px;
+    color: #888;
+    margin: 2px 0 0;
+  }
+
+  /* ── Content area ── */
+  .content {
+    padding: 24px 36px;
+  }
+
+  /* ── Section titles ── */
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #26215C;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin: 24px 0 10px;
+    padding-bottom: 5px;
+    border-bottom: 1.5px solid #E0E0E0;
+  }
+  .section-title:first-child {
+    margin-top: 0;
+  }
+
+  /* ── Data Table ── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 8px;
+    border: 1px solid #E0E0E0;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .data-table th {
+    background: #26215C;
+    color: #FFFFFF;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 10px 14px;
+    text-align: left;
+    border: 1px solid #1A1850;
+  }
+  .data-table td {
+    padding: 10px 14px;
+    font-size: 13px;
+    border: 1px solid #E8E8E8;
+    vertical-align: top;
+  }
+  .data-table tr:nth-child(even) td {
+    background: #FAFAFE;
+  }
+  .data-table .label-cell {
+    width: 38%;
+    font-weight: 600;
+    color: #555;
+    font-size: 12px;
+    background: #F5F5FA;
+  }
+  .data-table tr:nth-child(even) .label-cell {
+    background: #EEEEF5;
+  }
+  .data-table .value-cell {
+    color: #1A1A2E;
+    font-size: 13px;
+  }
+  .data-table .highlight {
+    font-weight: 700;
+    color: #26215C;
+    font-size: 14px;
+  }
+
+  /* ── Badge ── */
+  .badge-paid {
+    display: inline-block;
+    background: #D4EDDA;
+    color: #1D9E75;
+    padding: 3px 12px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+  .badge-pending {
+    display: inline-block;
+    background: #FFF3CD;
+    color: #BA7517;
+    padding: 3px 12px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── Amount highlight row ── */
+  .amount-row td {
+    background: #F0F7ED !important;
+    border-top: 2px solid #1D9E75;
+    border-bottom: 2px solid #1D9E75;
+  }
+  .amount-row .value-cell {
+    font-size: 18px;
+    font-weight: 800;
+    color: #1D9E75;
+  }
+
+  /* ── Terms ── */
+  .terms {
+    font-size: 12px;
+    color: #444;
+    line-height: 1.9;
+    margin: 8px 0 20px;
+  }
+  .terms ol {
+    padding-left: 20px;
+  }
+  .terms li {
+    margin-bottom: 4px;
+  }
+
+  /* ── Signature ── */
+  .sig-grid {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 16px;
+    gap: 40px;
+  }
+  .sig-box {
+    flex: 1;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+  }
+  .sig-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 28px;
+  }
+  .sig-line {
+    border-top: 1px solid #333;
+    width: 80%;
+    margin: 0 auto;
+    padding-top: 6px;
+    font-size: 10px;
+    color: #888;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    margin-top: 32px;
+    padding-top: 12px;
+    border-top: 1px solid #E0E0E0;
+    text-align: center;
+    font-size: 10px;
+    color: #AAAAAA;
+  }
+  .footer-brand {
+    font-weight: 700;
+    color: #26215C;
+  }
+`;
+
+// ─── Header HTML ─────────────────────────────────────────────────────────────
 
 function headerHtml(agent) {
   const logo = agent?.business_logo_uri
-    ? `<img src="${agent.business_logo_uri}" style="width:60px;height:60px;border-radius:8px;object-fit:cover;" />`
-    : '';
-  const trn = agent?.business_trn
-    ? `<p style="margin:2px 0;font-size:11px;color:#888;">TRN: ${agent.business_trn}</p>`
+    ? `<img src="${agent.business_logo_uri}" class="header-logo" />`
     : '';
 
   return `
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
-      <div style="display:flex;align-items:flex-start;gap:14px;">
+    <div class="header-banner">
+      <div class="header-left">
         ${logo}
         <div>
-          <h1 style="margin:0;font-size:22px;font-weight:800;color:#26215C;">${agent?.business_name ?? 'SakanArbab'}</h1>
-          ${agent?.business_tagline ? `<p style="margin:2px 0;font-size:12px;color:#888;">${agent.business_tagline}</p>` : ''}
-          ${trn}
+          <h1 class="header-biz-name">${agent?.business_name ?? 'SakanArbab'}</h1>
+          ${agent?.business_tagline ? `<p class="header-tagline">${agent.business_tagline}</p>` : ''}
+          ${agent?.business_trn ? `<p class="header-trn">TRN: ${agent.business_trn}</p>` : ''}
         </div>
       </div>
-      <div style="text-align:right;font-size:11px;color:#555;line-height:1.7;">
-        ${agent?.business_phone  ? `<div>${agent.business_phone}</div>`  : ''}
-        ${agent?.business_email  ? `<div>${agent.business_email}</div>`  : ''}
+      <div class="header-right">
+        ${agent?.business_phone ? `<div>${agent.business_phone}</div>` : ''}
+        ${agent?.business_email ? `<div>${agent.business_email}</div>` : ''}
         ${agent?.business_address ? `<div>${agent.business_address}</div>` : ''}
       </div>
     </div>
-    <hr style="border:none;border-top:2px solid #26215C;margin-bottom:24px;" />
   `;
 }
 
 const footerHtml = `
-  <div style="margin-top:40px;text-align:center;font-size:10px;color:#AAAAAA;">
-    Powered by SakanArbab &middot; sakanarbab.app
+  <div class="footer">
+    Generated on ${todayFormatted()} &middot; Powered by <span class="footer-brand">SakanArbab</span>
   </div>
-`;
-
-const baseStyles = `
-  * { box-sizing: border-box; }
-  body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    color: #1A1A2E;
-    padding: 32px;
-    font-size: 13px;
-    line-height: 1.6;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 24px;
-  }
-  td {
-    padding: 9px 12px;
-    vertical-align: top;
-  }
-  tr:nth-child(even) td {
-    background: #F5F5FA;
-  }
-  .label {
-    width: 40%;
-    font-weight: 600;
-    color: #555;
-    font-size: 12px;
-  }
-  .value {
-    color: #1A1A2E;
-    font-size: 13px;
-  }
-  h2.doc-title {
-    text-align: center;
-    font-size: 18px;
-    font-weight: 800;
-    color: #26215C;
-    letter-spacing: 2px;
-    margin-bottom: 28px;
-  }
-  .section-title {
-    font-size: 12px;
-    font-weight: 700;
-    color: #26215C;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin: 24px 0 10px;
-    border-bottom: 1px solid #E0E0E0;
-    padding-bottom: 4px;
-  }
-  .terms {
-    font-size: 12px;
-    color: #444;
-    line-height: 1.8;
-    margin-bottom: 28px;
-  }
-  .sig-table td {
-    padding: 6px 4px;
-    font-size: 12px;
-    color: #333;
-  }
-  .badge-paid {
-    display:inline-block;
-    background:#EAF3DE;
-    color:#1D9E75;
-    padding:3px 10px;
-    border-radius:4px;
-    font-weight:700;
-    font-size:12px;
-  }
 `;
 
 // ─── Function 1: generateContractPDF ─────────────────────────────────────────
@@ -146,47 +317,107 @@ export async function generateContractPDF(contract, agent) {
       <style>${baseStyles}</style>
     </head>
     <body>
-      ${headerHtml(agent)}
+      <div class="page">
+        ${headerHtml(agent)}
 
-      <h2 class="doc-title">TENANCY CONTRACT</h2>
+        <div class="doc-title-bar">
+          <h2 class="doc-title">Tenancy Contract</h2>
+          <p class="doc-subtitle">Contract ID: TC-${String(contract.id ?? '').padStart(4, '0')} &nbsp;|&nbsp; Date: ${todayFormatted()}</p>
+        </div>
 
-      <p class="section-title">Tenant Details</p>
-      <table>
-        <tr><td class="label">Tenant Name</td>       <td class="value">${contract.tenant_name ?? '—'}</td></tr>
-        <tr><td class="label">Phone</td>             <td class="value">${contract.tenant_phone ?? '—'}</td></tr>
-        <tr><td class="label">Email</td>             <td class="value">${contract.tenant_email ?? '—'}</td></tr>
-        <tr><td class="label">ID / Passport</td>     <td class="value">${contract.tenant_id_no ?? '—'}</td></tr>
-      </table>
+        <div class="content">
 
-      <p class="section-title">Contract Terms</p>
-      <table>
-        <tr><td class="label">Check-in Date</td>     <td class="value">${fmtDate(contract.check_in_date) ?? '—'}</td></tr>
-        <tr><td class="label">Check-out Date</td>    <td class="value">${contract.check_out_date ? fmtDate(contract.check_out_date) : 'Open-ended'}</td></tr>
-        <tr><td class="label">Monthly Rent</td>      <td class="value"><strong>${fmtAmount(contract.monthly_rent, currency)}</strong></td></tr>
-        <tr><td class="label">Security Deposit</td>  <td class="value">${fmtAmount(contract.deposit_amount, currency)}</td></tr>
-        <tr><td class="label">Payment Due</td>       <td class="value">Rent is due on the ${ordinal(contract.payment_due_day ?? 1)} of each month</td></tr>
-        ${contract.notes ? `<tr><td class="label">Notes</td><td class="value">${contract.notes}</td></tr>` : ''}
-      </table>
+          <!-- Tenant Details -->
+          <p class="section-title">Tenant Information</p>
+          <table class="data-table">
+            <tr>
+              <td class="label-cell">Tenant Name</td>
+              <td class="value-cell highlight">${contract.tenant_name ?? '—'}</td>
+            </tr>
+            <tr>
+              <td class="label-cell">Phone</td>
+              <td class="value-cell">${contract.tenant_phone ?? '—'}</td>
+            </tr>
+            <tr>
+              <td class="label-cell">Email</td>
+              <td class="value-cell">${contract.tenant_email ?? '—'}</td>
+            </tr>
+            <tr>
+              <td class="label-cell">ID / Passport No.</td>
+              <td class="value-cell">${contract.tenant_id_no ?? '—'}</td>
+            </tr>
+          </table>
 
-      <p class="section-title">Terms &amp; Conditions</p>
-      <p class="terms">
-        This agreement confirms the tenancy of the above bed unit.
-        The tenant agrees to pay rent by the due date each month.
-        The security deposit will be returned at end of tenancy subject to inspection.
-      </p>
+          <!-- Property / Unit Details -->
+          ${contract.property_name || contract.room_name || contract.bed_label ? `
+          <p class="section-title">Property & Unit</p>
+          <table class="data-table">
+            ${contract.property_name ? `<tr><td class="label-cell">Property</td><td class="value-cell">${contract.property_name}</td></tr>` : ''}
+            ${contract.room_name ? `<tr><td class="label-cell">Room</td><td class="value-cell">${contract.room_name}</td></tr>` : ''}
+            ${contract.bed_label ? `<tr><td class="label-cell">Bed / Unit</td><td class="value-cell">${contract.bed_label}</td></tr>` : ''}
+          </table>
+          ` : ''}
 
-      <p class="section-title">Signatures</p>
-      <table class="sig-table" style="margin-top:8px;">
-        <tr>
-          <td style="width:50%;">Landlord / Agent: <span style="display:inline-block;border-bottom:1px solid #333;width:120px;">&nbsp;</span></td>
-          <td>Date: <span style="display:inline-block;border-bottom:1px solid #333;width:100px;">&nbsp;</span></td>
-        </tr>
-        <tr><td style="padding-top:24px;">Tenant: <span style="display:inline-block;border-bottom:1px solid #333;width:140px;">&nbsp;</span></td>
-          <td style="padding-top:24px;">Date: <span style="display:inline-block;border-bottom:1px solid #333;width:100px;">&nbsp;</span></td>
-        </tr>
-      </table>
+          <!-- Contract Terms -->
+          <p class="section-title">Contract Terms</p>
+          <table class="data-table">
+            <tr>
+              <td class="label-cell">Check-in Date</td>
+              <td class="value-cell">${fmtDate(contract.check_in_date) ?? '—'}</td>
+            </tr>
+            <tr>
+              <td class="label-cell">Check-out Date</td>
+              <td class="value-cell">${contract.check_out_date ? fmtDate(contract.check_out_date) : 'Open-ended'}</td>
+            </tr>
+            <tr class="amount-row">
+              <td class="label-cell" style="background:#F0F7ED;">Monthly Rent</td>
+              <td class="value-cell">${fmtAmount(contract.monthly_rent, currency)}</td>
+            </tr>
+            <tr>
+              <td class="label-cell">Security Deposit</td>
+              <td class="value-cell">${fmtAmount(contract.deposit_amount, currency)}</td>
+            </tr>
+            <tr>
+              <td class="label-cell">Payment Due</td>
+              <td class="value-cell">${ordinal(contract.payment_due_day ?? 1)} of each month</td>
+            </tr>
+            ${contract.notes ? `
+            <tr>
+              <td class="label-cell">Notes</td>
+              <td class="value-cell">${contract.notes}</td>
+            </tr>
+            ` : ''}
+          </table>
 
-      ${footerHtml}
+          <!-- Terms & Conditions -->
+          <p class="section-title">Terms & Conditions</p>
+          <div class="terms">
+            <ol>
+              <li>This agreement confirms the tenancy of the above-mentioned bed/unit for the stated period.</li>
+              <li>The tenant agrees to pay the monthly rent by the due date specified above.</li>
+              <li>A late payment fee may apply if rent is not received within 5 days of the due date.</li>
+              <li>The security deposit will be refunded at the end of the tenancy, subject to property inspection and deductions for any damages or outstanding dues.</li>
+              <li>Either party may terminate this contract with a minimum 30-day written notice.</li>
+              <li>The tenant shall not sub-let the unit or transfer this tenancy without prior written consent.</li>
+            </ol>
+          </div>
+
+          <!-- Signatures -->
+          <p class="section-title">Signatures</p>
+          <div class="sig-grid">
+            <div class="sig-box">
+              <div class="sig-label">Landlord / Agent</div>
+              <div class="sig-line">Signature &amp; Date</div>
+            </div>
+            <div class="sig-box">
+              <div class="sig-label">Tenant</div>
+              <div class="sig-line">Signature &amp; Date</div>
+            </div>
+          </div>
+
+          ${footerHtml}
+        </div>
+      </div>
     </body>
     </html>
   `;
@@ -200,6 +431,10 @@ export async function generateContractPDF(contract, agent) {
 export async function generateReceiptPDF(payment, contract, agent) {
   const currency = agent?.currency ?? 'AED';
 
+  const statusBadge = (payment.status ?? 'PAID') === 'PAID'
+    ? `<span class="badge-paid">PAID</span>`
+    : `<span class="badge-pending">${payment.status}</span>`;
+
   const html = `
     <!DOCTYPE html>
     <html>
@@ -208,24 +443,93 @@ export async function generateReceiptPDF(payment, contract, agent) {
       <style>${baseStyles}</style>
     </head>
     <body>
-      ${headerHtml(agent)}
+      <div class="page">
+        ${headerHtml(agent)}
 
-      <h2 class="doc-title">PAYMENT RECEIPT</h2>
+        <div class="doc-title-bar">
+          <h2 class="doc-title">Payment Receipt</h2>
+          <p class="doc-subtitle">Receipt No: ${payment.txn_no ?? '—'} &nbsp;|&nbsp; Date: ${fmtDate(payment.payment_date) ?? todayFormatted()}</p>
+        </div>
 
-      <p class="section-title">Receipt Details</p>
-      <table>
-        <tr><td class="label">Receipt No.</td>      <td class="value"><strong>${payment.txn_no ?? '—'}</strong></td></tr>
-        <tr><td class="label">Tenant Name</td>      <td class="value">${contract?.tenant_name ?? '—'}</td></tr>
-        ${contract?.bed_label    ? `<tr><td class="label">Bed</td><td class="value">${contract.bed_label}</td></tr>` : ''}
-        ${contract?.property_name ? `<tr><td class="label">Property</td><td class="value">${contract.property_name}</td></tr>` : ''}
-        <tr><td class="label">Payment For</td>      <td class="value">${fmtMonth(payment.payment_for_month)}</td></tr>
-        <tr><td class="label">Amount Paid</td>      <td class="value"><strong>${fmtAmount(payment.amount, currency)}</strong></td></tr>
-        <tr><td class="label">Payment Mode</td>     <td class="value">${payment.payment_mode ?? '—'}</td></tr>
-        <tr><td class="label">Payment Date</td>     <td class="value">${fmtDate(payment.payment_date) ?? '—'}</td></tr>
-        <tr><td class="label">Status</td>           <td class="value"><span class="badge-paid">${payment.status ?? 'PAID'}</span></td></tr>
-      </table>
+        <div class="content">
 
-      ${footerHtml}
+          <!-- Tenant Info -->
+          <p class="section-title">Tenant Information</p>
+          <table class="data-table">
+            <tr>
+              <td class="label-cell">Tenant Name</td>
+              <td class="value-cell highlight">${contract?.tenant_name ?? '—'}</td>
+            </tr>
+            ${contract?.property_name ? `
+            <tr>
+              <td class="label-cell">Property</td>
+              <td class="value-cell">${contract.property_name}</td>
+            </tr>
+            ` : ''}
+            ${contract?.room_name ? `
+            <tr>
+              <td class="label-cell">Room</td>
+              <td class="value-cell">${contract.room_name}</td>
+            </tr>
+            ` : ''}
+            ${contract?.bed_label ? `
+            <tr>
+              <td class="label-cell">Bed / Unit</td>
+              <td class="value-cell">${contract.bed_label}</td>
+            </tr>
+            ` : ''}
+          </table>
+
+          <!-- Payment Details -->
+          <p class="section-title">Payment Details</p>
+          <table class="data-table">
+            <tr>
+              <td class="label-cell">Receipt No.</td>
+              <td class="value-cell highlight">${payment.txn_no ?? '—'}</td>
+            </tr>
+            <tr>
+              <td class="label-cell">Payment For</td>
+              <td class="value-cell">${fmtMonth(payment.payment_for_month)}</td>
+            </tr>
+            <tr class="amount-row">
+              <td class="label-cell" style="background:#F0F7ED;">Amount Paid</td>
+              <td class="value-cell">${fmtAmount(payment.amount, currency)}</td>
+            </tr>
+            <tr>
+              <td class="label-cell">Payment Mode</td>
+              <td class="value-cell">${payment.payment_mode ?? '—'}</td>
+            </tr>
+            <tr>
+              <td class="label-cell">Payment Date</td>
+              <td class="value-cell">${fmtDate(payment.payment_date) ?? '—'}</td>
+            </tr>
+            <tr>
+              <td class="label-cell">Status</td>
+              <td class="value-cell">${statusBadge}</td>
+            </tr>
+            ${payment.notes ? `
+            <tr>
+              <td class="label-cell">Notes</td>
+              <td class="value-cell">${payment.notes}</td>
+            </tr>
+            ` : ''}
+          </table>
+
+          <!-- Summary Box -->
+          <div style="background:#26215C; border-radius:8px; padding:18px 24px; margin-top:20px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-size:11px; color:rgba(255,255,255,0.6); text-transform:uppercase; letter-spacing:1px;">Total Amount Received</div>
+              <div style="font-size:24px; font-weight:800; color:#FFFFFF; margin-top:4px;">${fmtAmount(payment.amount, currency)}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:11px; color:rgba(255,255,255,0.6);">For the month of</div>
+              <div style="font-size:14px; font-weight:700; color:#FFFFFF; margin-top:2px;">${fmtMonth(payment.payment_for_month)}</div>
+            </div>
+          </div>
+
+          ${footerHtml}
+        </div>
+      </div>
     </body>
     </html>
   `;

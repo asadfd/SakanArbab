@@ -27,7 +27,9 @@ function getInitials(businessName) {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 
-export default function BusinessProfileScreen({ navigation }) {
+export default function BusinessProfileScreen({ navigation, route }) {
+  // If navigated from SettingsScreen, we're in edit mode
+  const isEditMode = route?.params?.edit === true || navigation.canGoBack();
   const [logoUri, setLogoUri] = useState(null);
   const [businessName, setBusinessName] = useState('');
   const [currency, setCurrency] = useState('AED');
@@ -113,7 +115,11 @@ export default function BusinessProfileScreen({ navigation }) {
         currency,
       });
 
-      navigation.replace('Main');
+      if (isEditMode) {
+        navigation.goBack();
+      } else {
+        navigation.replace('Main');
+      }
     } catch (err) {
       setErrors({ general: 'Failed to save. Please try again.' });
     } finally {
@@ -139,7 +145,12 @@ export default function BusinessProfileScreen({ navigation }) {
         keyboardShouldPersistTaps="handled"
       >
         {/* Header */}
-        <Text style={styles.title}>Set Up Your Business</Text>
+        {isEditMode && (
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Text style={styles.backButtonText}>{'< Back'}</Text>
+          </TouchableOpacity>
+        )}
+        <Text style={styles.title}>{isEditMode ? 'Edit Business Profile' : 'Set Up Your Business'}</Text>
         <Text style={styles.subtitle}>This will appear on all tenant documents</Text>
 
         {/* Logo Picker */}
@@ -289,13 +300,15 @@ export default function BusinessProfileScreen({ navigation }) {
           {saving ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.saveButtonText}>Save &amp; Continue</Text>
+            <Text style={styles.saveButtonText}>{isEditMode ? 'Save Changes' : 'Save & Continue'}</Text>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
-          <Text style={styles.resetButtonText}>Reset &amp; Start Over</Text>
-        </TouchableOpacity>
+        {!isEditMode && (
+          <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
+            <Text style={styles.resetButtonText}>Reset &amp; Start Over</Text>
+          </TouchableOpacity>
+        )}
 
         <View style={styles.bottomPadding} />
       </ScrollView>
@@ -321,6 +334,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1A1A2E',
     marginBottom: 6,
+  },
+  backButton: {
+    marginBottom: 12,
+  },
+  backButtonText: {
+    fontSize: 15,
+    color: '#26215C',
+    fontWeight: '600',
   },
   subtitle: {
     fontSize: 14,

@@ -26,6 +26,7 @@ import AdvisoryScreen from '../screens/settings/AdvisoryScreen';
 import ExpensesScreen from '../screens/settings/ExpensesScreen';
 import ExpenseDetailScreen from '../screens/settings/ExpenseDetailScreen';
 import RoomPLScreen from '../screens/settings/RoomPLScreen';
+import BusinessProfileScreen from '../screens/setup/BusinessProfileScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator;
@@ -92,6 +93,7 @@ function MoreStack() {
       <S.Screen name="ExpensesScreen" component={ExpensesScreen} />
       <S.Screen name="ExpenseDetailScreen" component={ExpenseDetailScreen} />
       <S.Screen name="RoomPLScreen" component={RoomPLScreen} />
+      <S.Screen name="BusinessProfileScreen" component={BusinessProfileScreen} />
     </S.Navigator>
   );
 }
