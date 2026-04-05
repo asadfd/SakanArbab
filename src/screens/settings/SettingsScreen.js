@@ -37,8 +37,7 @@ export default function SettingsScreen({ navigation }) {
         {
           text: 'Sign Out',
           style: 'destructive',
-          onPress: async () => {
-            await SecureStore.deleteItemAsync('app_pin');
+          onPress: () => {
             navigation.getParent()?.getParent()?.replace('Auth');
           },
         },

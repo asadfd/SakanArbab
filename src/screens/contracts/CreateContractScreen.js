@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
   TextInput,
   Modal,
   Alert,
@@ -86,9 +87,9 @@ function DatePickerField({ label, required, value, onChange, placeholder, error 
       </TouchableOpacity>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-      <Modal visible={visible} animationType="slide" transparent onRequestClose={() => setVisible(false)}>
+      <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={() => setVisible(false)}>
         <View style={styles.modalOverlay}>
-          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setVisible(false)} />
+          <Pressable style={styles.modalBackdrop} onPress={() => setVisible(false)} />
           <View style={styles.dateModalSheet}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>{label}</Text>
@@ -100,6 +101,7 @@ function DatePickerField({ label, required, value, onChange, placeholder, error 
                     selectedValue={tempDay}
                     onValueChange={setTempDay}
                     style={styles.picker}
+                    mode="dialog"
                     dropdownIconColor="#26215C"
                   >
                     {DAYS.map((d) => <Picker.Item key={d} label={String(d)} value={d} />)}
@@ -113,6 +115,7 @@ function DatePickerField({ label, required, value, onChange, placeholder, error 
                     selectedValue={tempMonth}
                     onValueChange={setTempMonth}
                     style={styles.picker}
+                    mode="dialog"
                     dropdownIconColor="#26215C"
                   >
                     {MONTHS.map((m, i) => <Picker.Item key={m} label={m} value={i + 1} />)}
@@ -126,6 +129,7 @@ function DatePickerField({ label, required, value, onChange, placeholder, error 
                     selectedValue={tempYear}
                     onValueChange={setTempYear}
                     style={styles.picker}
+                    mode="dialog"
                     dropdownIconColor="#26215C"
                   >
                     {YEARS.map((y) => <Picker.Item key={y} label={String(y)} value={y} />)}

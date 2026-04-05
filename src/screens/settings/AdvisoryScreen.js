@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
   ScrollView,
   Modal,
   StyleSheet,
@@ -62,9 +63,9 @@ function MonthPickerModal({ visible, value, onConfirm, onClose }) {
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} onShow={onShow}>
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={onClose} onShow={onShow}>
       <View style={styles.modalOverlay}>
-        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={onClose} />
+        <Pressable style={styles.modalBackdrop} onPress={onClose} />
         <View style={styles.modalSheet}>
           <View style={styles.modalHandle} />
           <Text style={styles.modalTitle}>Select Month</Text>
@@ -72,7 +73,7 @@ function MonthPickerModal({ visible, value, onConfirm, onClose }) {
             <View style={[styles.datePickerCol, { flex: 2 }]}>
               <Text style={styles.datePickerColLabel}>Month</Text>
               <View style={styles.pickerWrapper}>
-                <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} dropdownIconColor="#26215C">
+                <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
                   {MONTHS.map((m, i) => <Picker.Item key={m} label={m} value={i + 1} />)}
                 </Picker>
               </View>
@@ -80,7 +81,7 @@ function MonthPickerModal({ visible, value, onConfirm, onClose }) {
             <View style={styles.datePickerCol}>
               <Text style={styles.datePickerColLabel}>Year</Text>
               <View style={styles.pickerWrapper}>
-                <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} dropdownIconColor="#26215C">
+                <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
                   {YEARS.map((y) => <Picker.Item key={y} label={String(y)} value={y} />)}
                 </Picker>
               </View>

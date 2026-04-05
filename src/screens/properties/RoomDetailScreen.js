@@ -4,6 +4,7 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
+  Pressable,
   TextInput,
   Modal,
   StyleSheet,
@@ -263,9 +264,9 @@ export default function RoomDetailScreen({ navigation, route }) {
       )}
 
       {/* Room Edit Modal */}
-      <Modal visible={roomModalVisible} animationType="slide" transparent onRequestClose={() => setRoomModalVisible(false)}>
+      <Modal visible={roomModalVisible} animationType="slide" transparent statusBarTranslucent onRequestClose={() => setRoomModalVisible(false)}>
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setRoomModalVisible(false)} />
+          <Pressable style={styles.modalBackdrop} onPress={() => setRoomModalVisible(false)} />
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Edit Room</Text>
@@ -287,9 +288,9 @@ export default function RoomDetailScreen({ navigation, route }) {
       </Modal>
 
       {/* Bed Add/Edit Modal */}
-      <Modal visible={bedModalVisible} animationType="slide" transparent onRequestClose={() => setBedModalVisible(false)}>
+      <Modal visible={bedModalVisible} animationType="slide" transparent statusBarTranslucent onRequestClose={() => setBedModalVisible(false)}>
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setBedModalVisible(false)} />
+          <Pressable style={styles.modalBackdrop} onPress={() => setBedModalVisible(false)} />
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>{editingBed ? 'Edit Bed' : 'New Bed'}</Text>
@@ -300,7 +301,7 @@ export default function RoomDetailScreen({ navigation, route }) {
 
               <Text style={styles.label}>Status</Text>
               <View style={styles.pickerWrapper}>
-                <Picker selectedValue={bedForm.status} onValueChange={(v) => setBedForm((f) => ({ ...f, status: v }))} style={styles.picker} dropdownIconColor="#26215C">
+                <Picker selectedValue={bedForm.status} onValueChange={(v) => setBedForm((f) => ({ ...f, status: v }))} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
                   {STATUS_OPTIONS.map((s) => <Picker.Item key={s} label={s} value={s} />)}
                 </Picker>
               </View>

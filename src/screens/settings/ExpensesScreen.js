@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
   TextInput,
   Modal,
   Alert,
@@ -89,9 +90,9 @@ function MonthYearModal({ visible, value, onConfirm, onClose }) {
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} onShow={onShow}>
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={onClose} onShow={onShow}>
       <View style={styles.modalOverlay}>
-        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={onClose} />
+        <Pressable style={styles.modalBackdrop} onPress={onClose} />
         <View style={styles.modalSheet}>
           <View style={styles.modalHandle} />
           <Text style={styles.modalTitle}>Select Month</Text>
@@ -99,7 +100,7 @@ function MonthYearModal({ visible, value, onConfirm, onClose }) {
             <View style={[styles.datePickerCol, { flex: 2 }]}>
               <Text style={styles.datePickerColLabel}>Month</Text>
               <View style={styles.pickerWrapper}>
-                <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} dropdownIconColor="#26215C">
+                <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
                   {MONTHS.map((m, i) => <Picker.Item key={m} label={m} value={i + 1} />)}
                 </Picker>
               </View>
@@ -107,7 +108,7 @@ function MonthYearModal({ visible, value, onConfirm, onClose }) {
             <View style={styles.datePickerCol}>
               <Text style={styles.datePickerColLabel}>Year</Text>
               <View style={styles.pickerWrapper}>
-                <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} dropdownIconColor="#26215C">
+                <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
                   {YEARS.map((y) => <Picker.Item key={y} label={String(y)} value={y} />)}
                 </Picker>
               </View>
@@ -168,9 +169,9 @@ function DatePickerField({ value, onChange, error }) {
       </TouchableOpacity>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-      <Modal visible={visible} animationType="slide" transparent onRequestClose={() => setVisible(false)}>
+      <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={() => setVisible(false)}>
         <View style={styles.modalOverlay}>
-          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setVisible(false)} />
+          <Pressable style={styles.modalBackdrop} onPress={() => setVisible(false)} />
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Expense Date</Text>
@@ -178,7 +179,7 @@ function DatePickerField({ value, onChange, error }) {
               <View style={styles.datePickerCol}>
                 <Text style={styles.datePickerColLabel}>Day</Text>
                 <View style={styles.pickerWrapper}>
-                  <Picker selectedValue={tempDay} onValueChange={setTempDay} style={styles.picker} dropdownIconColor="#26215C">
+                  <Picker selectedValue={tempDay} onValueChange={setTempDay} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
                     {DAYS.map((d) => <Picker.Item key={d} label={String(d)} value={d} />)}
                   </Picker>
                 </View>
@@ -186,7 +187,7 @@ function DatePickerField({ value, onChange, error }) {
               <View style={styles.datePickerCol}>
                 <Text style={styles.datePickerColLabel}>Month</Text>
                 <View style={styles.pickerWrapper}>
-                  <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} dropdownIconColor="#26215C">
+                  <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
                     {MONTHS.map((m, i) => <Picker.Item key={m} label={m.slice(0,3)} value={i + 1} />)}
                   </Picker>
                 </View>
@@ -194,7 +195,7 @@ function DatePickerField({ value, onChange, error }) {
               <View style={styles.datePickerCol}>
                 <Text style={styles.datePickerColLabel}>Year</Text>
                 <View style={styles.pickerWrapper}>
-                  <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} dropdownIconColor="#26215C">
+                  <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
                     {YEARS.map((y) => <Picker.Item key={y} label={String(y)} value={y} />)}
                   </Picker>
                 </View>
@@ -316,9 +317,9 @@ function ExpenseModal({ visible, editingExpense, propertyId, onSaved, onClose })
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} onShow={onShow}>
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={onClose} onShow={onShow}>
       <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={onClose} />
+        <Pressable style={styles.modalBackdrop} onPress={onClose} />
         <View style={styles.modalSheet}>
           <View style={styles.modalHandle} />
           <Text style={styles.modalTitle}>{editingExpense ? 'Edit Expense' : 'Add Expense'}</Text>
@@ -331,6 +332,7 @@ function ExpenseModal({ visible, editingExpense, propertyId, onSaved, onClose })
                 selectedValue={form.category}
                 onValueChange={(v) => setForm((f) => ({ ...f, category: v }))}
                 style={styles.picker}
+                mode="dialog"
                 dropdownIconColor="#26215C"
               >
                 {CATEGORIES.map((c) => <Picker.Item key={c} label={c} value={c} />)}

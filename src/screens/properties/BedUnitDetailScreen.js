@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
   TextInput,
   Modal,
   Alert,
@@ -353,9 +354,9 @@ export default function BedUnitDetailScreen({ navigation, route }) {
       </ScrollView>
 
       {/* Edit Bed Modal */}
-      <Modal visible={editModalVisible} animationType="slide" transparent onRequestClose={() => setEditModalVisible(false)}>
+      <Modal visible={editModalVisible} animationType="slide" transparent statusBarTranslucent onRequestClose={() => setEditModalVisible(false)}>
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setEditModalVisible(false)} />
+          <Pressable style={styles.modalBackdrop} onPress={() => setEditModalVisible(false)} />
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Edit Bed</Text>
@@ -368,7 +369,7 @@ export default function BedUnitDetailScreen({ navigation, route }) {
                 <>
                   <Text style={styles.label}>Status</Text>
                   <View style={styles.pickerWrapper}>
-                    <Picker selectedValue={bedForm.status} onValueChange={(v) => setBedForm((f) => ({ ...f, status: v }))} style={styles.picker} dropdownIconColor="#26215C">
+                    <Picker selectedValue={bedForm.status} onValueChange={(v) => setBedForm((f) => ({ ...f, status: v }))} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
                       {['AVAILABLE', 'RESERVED', 'MAINTENANCE'].map((s) => <Picker.Item key={s} label={s} value={s} />)}
                     </Picker>
                   </View>
@@ -399,9 +400,9 @@ export default function BedUnitDetailScreen({ navigation, route }) {
       </Modal>
 
       {/* Change Status Modal */}
-      <Modal visible={statusModalVisible} animationType="slide" transparent onRequestClose={() => setStatusModalVisible(false)}>
+      <Modal visible={statusModalVisible} animationType="slide" transparent statusBarTranslucent onRequestClose={() => setStatusModalVisible(false)}>
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setStatusModalVisible(false)} />
+          <Pressable style={styles.modalBackdrop} onPress={() => setStatusModalVisible(false)} />
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Change Status</Text>
@@ -410,7 +411,7 @@ export default function BedUnitDetailScreen({ navigation, route }) {
             </Text>
             <Text style={styles.label}>New Status</Text>
             <View style={styles.pickerWrapper}>
-              <Picker selectedValue={newStatus} onValueChange={setNewStatus} style={styles.picker} dropdownIconColor="#26215C">
+              <Picker selectedValue={newStatus} onValueChange={setNewStatus} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
                 {(STATUS_TRANSITIONS[bed.status] ?? []).map((s) => (
                   <Picker.Item key={s} label={s} value={s} />
                 ))}
