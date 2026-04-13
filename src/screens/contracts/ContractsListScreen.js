@@ -106,18 +106,26 @@ export default function ContractsListScreen({ navigation }) {
   const [currency, setCurrency]       = useState('AED');
   const [loading, setLoading]         = useState(true);
 
-  const load = useCallback(() => {
+  const loadFor = useCallback(async (tab) => {
     setLoading(true);
-    const statusFilter = activeTab === 'ALL' ? null : activeTab;
-    setContracts(getAllContractsWithDetails(statusFilter));
-    const overdue = getOverdueTenants();
-    setOverdueIds(new Set(overdue.map((c) => c.id)));
-    const agent = getAgent();
-    setCurrency(agent?.currency ?? 'AED');
-    setLoading(false);
-  }, [activeTab]);
+    try {
+      const statusFilter = tab === 'ALL' ? null : tab;
+      const [contractList, overdue, agent] = await Promise.all([
+        getAllContractsWithDetails(statusFilter),
+        getOverdueTenants(),
+        getAgent(),
+      ]);
+      setContracts(contractList);
+      setOverdueIds(new Set(overdue.map((c) => c.id)));
+      setCurrency(agent?.currency ?? 'AED');
+    } catch (err) {
+      console.error('Contracts load error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => { loadFor(activeTab); }, [loadFor, activeTab]));
 
   const filtered = contracts.filter((c) =>
     c.tenant_name?.toLowerCase().includes(search.toLowerCase())
@@ -126,16 +134,7 @@ export default function ContractsListScreen({ navigation }) {
   function handleTabChange(tab) {
     setSearch('');
     setActiveTab(tab);
-    // load() runs via useFocusEffect dependency on activeTab — but since
-    // focus doesn't re-fire, call load manually after state settles.
-    setLoading(true);
-    const statusFilter = tab === 'ALL' ? null : tab;
-    setContracts(getAllContractsWithDetails(statusFilter));
-    const overdue = getOverdueTenants();
-    setOverdueIds(new Set(overdue.map((c) => c.id)));
-    const agent = getAgent();
-    setCurrency(agent?.currency ?? 'AED');
-    setLoading(false);
+    loadFor(tab);
   }
 
   // ─── Render ─────────────────────────────────────────────────────────────────

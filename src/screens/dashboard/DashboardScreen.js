@@ -12,14 +12,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   getAgent,
-  getAllProperties,
-  getAllPayments,
   getPaymentsThisMonth,
   getOverdueTenants,
-  getContractById,
   ensureMonthlyPayments,
+  getDashboardStats,
+  getRecentPayments,
 } from '../../database/database';
-import db from '../../database/database';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -52,43 +50,27 @@ function formatDate(dateStr) {
 
 // ─── Data loader ─────────────────────────────────────────────────────────────
 
-function loadDashboardData() {
-  // Auto-generate pending payments for all active contracts up to current month
-  ensureMonthlyPayments();
+async function loadDashboardData() {
+  await ensureMonthlyPayments();
 
-  const agent = getAgent();
+  const [agent, stats, overdueList, thisMonthPayments, recentPayments] = await Promise.all([
+    getAgent(),
+    getDashboardStats(),
+    getOverdueTenants(),
+    getPaymentsThisMonth(),
+    getRecentPayments(5),
+  ]);
 
-  const totalBeds = db.getFirstSync(`SELECT COUNT(*) AS c FROM bed_units`)?.c ?? 0;
-  const occupiedBeds = db.getFirstSync(
-    `SELECT COUNT(*) AS c FROM bed_units WHERE status = 'OCCUPIED'`
-  )?.c ?? 0;
-  const availableBeds = db.getFirstSync(
-    `SELECT COUNT(*) AS c FROM bed_units WHERE status = 'AVAILABLE'`
-  )?.c ?? 0;
-  const totalProperties = getAllProperties().length;
-
-  const overdueList = getOverdueTenants();
-
-  const thisMonthPayments = getPaymentsThisMonth();
   const totalCollected = thisMonthPayments
     .filter((p) => p.status === 'PAID')
     .reduce((sum, p) => sum + (p.amount ?? 0), 0);
 
-  // Last 5 payments with tenant name joined
-  const recentPayments = db.getAllSync(
-    `SELECT p.*, tc.tenant_name
-     FROM payments p
-     LEFT JOIN tenancy_contracts tc ON tc.id = p.tenancy_id
-     ORDER BY p.created_at DESC
-     LIMIT 5`
-  );
-
   return {
     agent,
-    totalBeds,
-    occupiedBeds,
-    availableBeds,
-    totalProperties,
+    totalBeds: stats.totalBeds,
+    occupiedBeds: stats.occupiedBeds,
+    availableBeds: stats.availableBeds,
+    totalProperties: stats.totalProperties,
     overdueList,
     thisMonthPayments,
     totalCollected,
@@ -100,10 +82,18 @@ function loadDashboardData() {
 
 export default function DashboardScreen({ navigation }) {
   const [data, setData] = useState(null);
+  const [loadError, setLoadError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(() => {
-    setData(loadDashboardData());
+  const load = useCallback(async () => {
+    try {
+      setLoadError(null);
+      const result = await loadDashboardData();
+      setData(result);
+    } catch (err) {
+      console.error('Dashboard load error:', err);
+      setLoadError(err?.message ?? 'Failed to load dashboard.');
+    }
   }, []);
 
   useFocusEffect(
@@ -112,10 +102,31 @@ export default function DashboardScreen({ navigation }) {
     }, [load])
   );
 
-  function onRefresh() {
+  async function onRefresh() {
     setRefreshing(true);
-    load();
+    await load();
     setRefreshing(false);
+  }
+
+  if (loadError) {
+    return (
+      <View style={{ flex: 1, padding: 24, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
+        <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#E24B4A" />
+        <Text style={{ marginTop: 12, fontSize: 15, fontWeight: '600', color: '#1A1A2E', textAlign: 'center' }}>
+          Could not load dashboard
+        </Text>
+        <Text style={{ marginTop: 6, fontSize: 13, color: '#888780', textAlign: 'center' }}>
+          {loadError}
+        </Text>
+        <TouchableOpacity
+          onPress={load}
+          style={{ marginTop: 16, backgroundColor: '#26215C', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }}
+          activeOpacity={0.8}
+        >
+          <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
   if (!data) return null;

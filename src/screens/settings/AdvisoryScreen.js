@@ -73,7 +73,7 @@ function MonthPickerModal({ visible, value, onConfirm, onClose }) {
             <View style={[styles.datePickerCol, { flex: 2 }]}>
               <Text style={styles.datePickerColLabel}>Month</Text>
               <View style={styles.pickerWrapper}>
-                <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                   {MONTHS.map((m, i) => <Picker.Item key={m} label={m} value={i + 1} />)}
                 </Picker>
               </View>
@@ -81,7 +81,7 @@ function MonthPickerModal({ visible, value, onConfirm, onClose }) {
             <View style={styles.datePickerCol}>
               <Text style={styles.datePickerColLabel}>Year</Text>
               <View style={styles.pickerWrapper}>
-                <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                   {YEARS.map((y) => <Picker.Item key={y} label={String(y)} value={y} />)}
                 </Picker>
               </View>
@@ -125,38 +125,43 @@ export default function AdvisoryScreen({ navigation }) {
   const [currency, setCurrency]         = useState('AED');
   const [loading, setLoading]           = useState(true);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    const a   = getAgent();
-    setCurrency(a?.currency ?? 'AED');
-    const props = getAllProperties();
-    setProperties(props);
+    try {
+      const [a, props] = await Promise.all([getAgent(), getAllProperties()]);
+      setCurrency(a?.currency ?? 'AED');
+      setProperties(props ?? []);
 
-    // Per-property P&L (add real net = income - owner_cost - commission - expenses)
-    const plList = props.map((p) => {
-      const pl = getPLByProperty(p.id, month);
-      return {
-        ...p,
-        income:     pl.income,
-        owner_cost: pl.owner_cost,
-        commission: pl.commission,
-        expenses:   pl.expenses,
-        net:        pl.income - pl.owner_cost - pl.commission - pl.expenses,
+      // Per-property P&L (net = income - owner_cost - commission - expenses)
+      const plList = await Promise.all(
+        (props ?? []).map(async (p) => {
+          const pl = await getPLByProperty(p.id, month);
+          return {
+            ...p,
+            income:     pl.income,
+            owner_cost: pl.owner_cost,
+            commission: pl.commission,
+            expenses:   pl.expenses,
+            net:        pl.income - pl.owner_cost - pl.commission - pl.expenses,
+          };
+        })
+      );
+      setPropertyPLs(plList);
+
+      // Overall summary — sum across all properties
+      const overall = {
+        total_income:     plList.reduce((s, p) => s + p.income,     0),
+        total_owner_cost: plList.reduce((s, p) => s + p.owner_cost, 0),
+        total_commission: plList.reduce((s, p) => s + p.commission, 0),
+        total_expenses:   plList.reduce((s, p) => s + p.expenses,   0),
       };
-    });
-    setPropertyPLs(plList);
-
-    // Overall summary — sum across all properties
-    const overall = {
-      total_income:     plList.reduce((s, p) => s + p.income,     0),
-      total_owner_cost: plList.reduce((s, p) => s + p.owner_cost, 0),
-      total_commission: plList.reduce((s, p) => s + p.commission, 0),
-      total_expenses:   plList.reduce((s, p) => s + p.expenses,   0),
-    };
-    overall.net_profit = overall.total_income - overall.total_owner_cost - overall.total_commission - overall.total_expenses;
-    setSummary(overall);
-
-    setLoading(false);
+      overall.net_profit = overall.total_income - overall.total_owner_cost - overall.total_commission - overall.total_expenses;
+      setSummary(overall);
+    } catch (err) {
+      console.error('[AdvisoryScreen] load error:', err);
+    } finally {
+      setLoading(false);
+    }
   }, [month]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));

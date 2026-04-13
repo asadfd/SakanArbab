@@ -23,43 +23,16 @@ import {
   updateRoom,
   deleteRoom,
   getBedsByRoom,
+  getPropertyStats,
+  hasActiveContracts,
 } from '../../database/database';
-import db from '../../database/database';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function getRoomStats(roomId) {
-  const beds = getBedsByRoom(roomId);
+async function getRoomStats(roomId) {
+  const beds = await getBedsByRoom(roomId);
   const total = beds.length;
   const available = beds.filter((b) => b.status === 'AVAILABLE').length;
   const occupied = beds.filter((b) => b.status === 'OCCUPIED').length;
   return { total, available, occupied };
-}
-
-function hasActiveContracts(roomId) {
-  const row = db.getFirstSync(
-    `SELECT COUNT(*) AS c
-     FROM tenancy_contracts tc
-     JOIN bed_units bu ON bu.id = tc.bed_unit_id
-     WHERE bu.room_id = ? AND tc.status = 'ACTIVE'`,
-    [roomId]
-  );
-  return (row?.c ?? 0) > 0;
-}
-
-function getPropertyStats(propertyId) {
-  const roomCount = db.getFirstSync(
-    `SELECT COUNT(*) AS c FROM rooms WHERE property_id = ?`, [propertyId]
-  )?.c ?? 0;
-  const bedCount = db.getFirstSync(
-    `SELECT COUNT(*) AS c FROM bed_units bu JOIN rooms r ON r.id = bu.room_id WHERE r.property_id = ?`,
-    [propertyId]
-  )?.c ?? 0;
-  const availCount = db.getFirstSync(
-    `SELECT COUNT(*) AS c FROM bed_units bu JOIN rooms r ON r.id = bu.room_id WHERE r.property_id = ? AND bu.status = 'AVAILABLE'`,
-    [propertyId]
-  )?.c ?? 0;
-  return { roomCount, bedCount, availCount };
 }
 
 const EMPTY_ROOM_FORM = { name: '', floor: '', description: '' };
@@ -88,14 +61,25 @@ export default function PropertyDetailScreen({ navigation, route }) {
 
   const swipeableRefs = useRef({});
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    const prop = getPropertyById(propertyId);
-    setProperty(prop);
-    setStats(getPropertyStats(propertyId));
-    const roomList = getRoomsByProperty(propertyId);
-    setRooms(roomList.map((r) => ({ ...r, ...getRoomStats(r.id) })));
-    setLoading(false);
+    try {
+      const [prop, propStats, roomList] = await Promise.all([
+        getPropertyById(propertyId),
+        getPropertyStats(propertyId),
+        getRoomsByProperty(propertyId),
+      ]);
+      setProperty(prop);
+      setStats(propStats);
+      const withStats = await Promise.all(
+        roomList.map(async (r) => ({ ...r, ...(await getRoomStats(r.id)) }))
+      );
+      setRooms(withStats);
+    } catch (err) {
+      console.error('Property load error:', err);
+    } finally {
+      setLoading(false);
+    }
   }, [propertyId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -118,14 +102,16 @@ export default function PropertyDetailScreen({ navigation, route }) {
     if (!propForm.name.trim()) { setPropFormError('Property name is required.'); return; }
     setPropSaving(true);
     try {
-      updateProperty(propertyId, {
+      await updateProperty(propertyId, {
         name: propForm.name.trim(),
         address: propForm.address.trim() || null,
         city: propForm.city.trim() || null,
         description: propForm.description.trim() || null,
       });
       setPropModalVisible(false);
-      load();
+      await load();
+    } catch (err) {
+      setPropFormError(err?.message ?? 'Failed to save.');
     } finally {
       setPropSaving(false);
     }
@@ -152,10 +138,15 @@ export default function PropertyDetailScreen({ navigation, route }) {
     setRoomModalVisible(true);
   }
 
-  function handleDeleteRoom(room) {
+  async function handleDeleteRoom(room) {
     Object.values(swipeableRefs.current).forEach((r) => r?.close());
-    if (hasActiveContracts(room.id)) {
-      Alert.alert('Cannot Delete', 'This room has active contracts. End all contracts first.');
+    try {
+      if (await hasActiveContracts(room.id)) {
+        Alert.alert('Cannot Delete', 'This room has active contracts. End all contracts first.');
+        return;
+      }
+    } catch (err) {
+      Alert.alert('Error', err?.message ?? 'Failed to check contracts.');
       return;
     }
     Alert.alert(
@@ -163,7 +154,18 @@ export default function PropertyDetailScreen({ navigation, route }) {
       `Delete "${room.name}"? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => { deleteRoom(room.id); load(); } },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteRoom(room.id);
+              await load();
+            } catch (err) {
+              Alert.alert('Error', err?.message ?? 'Failed to delete room.');
+            }
+          },
+        },
       ]
     );
   }
@@ -173,13 +175,13 @@ export default function PropertyDetailScreen({ navigation, route }) {
     setRoomSaving(true);
     try {
       if (editingRoom) {
-        updateRoom(editingRoom.id, {
+        await updateRoom(editingRoom.id, {
           name: roomForm.name.trim(),
           floor: roomForm.floor.trim() || null,
           description: roomForm.description.trim() || null,
         });
       } else {
-        insertRoom({
+        await insertRoom({
           property_id: propertyId,
           name: roomForm.name.trim(),
           floor: roomForm.floor.trim() || null,
@@ -187,7 +189,9 @@ export default function PropertyDetailScreen({ navigation, route }) {
         });
       }
       setRoomModalVisible(false);
-      load();
+      await load();
+    } catch (err) {
+      setRoomFormError(err?.message ?? 'Failed to save room.');
     } finally {
       setRoomSaving(false);
     }

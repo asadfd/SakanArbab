@@ -40,47 +40,44 @@ export default function LoginScreen({ navigation }) {
   }
 
   async function handlePinComplete(entered) {
-    if (mode === 'setup') {
-      setFirstPin(entered);
-      setPin('');
-      setMode('confirm');
-      setErrorMsg('');
-      return;
-    }
-
-    if (mode === 'confirm') {
-      if (entered !== firstPin) {
-        setErrorMsg("PINs don't match. Try again.");
-        shake();
-        setMode('setup');
-        setFirstPin('');
+    try {
+      if (mode === 'setup') {
+        setFirstPin(entered);
+        setPin('');
+        setMode('confirm');
+        setErrorMsg('');
         return;
       }
-      await SecureStore.setItemAsync('app_pin', entered);
-      saveLocalAgent();
-      const agent = getAgent();
-      if (agent?.business_name) {
-        navigation.getParent()?.replace('Main');
-      } else {
-        navigation.getParent()?.replace('Setup');
-      }
-      return;
-    }
 
-    if (mode === 'unlock') {
-      const stored = await SecureStore.getItemAsync('app_pin');
-      if (entered !== stored) {
-        setErrorMsg('Incorrect PIN. Try again.');
-        shake();
+      if (mode === 'confirm') {
+        if (entered !== firstPin) {
+          setErrorMsg("PINs don't match. Try again.");
+          shake();
+          setMode('setup');
+          setFirstPin('');
+          return;
+        }
+        await SecureStore.setItemAsync('app_pin', entered);
+        await saveLocalAgent();
+        const agent = await getAgent();
+        navigation.replace(agent?.business_name ? 'Main' : 'Setup');
         return;
       }
-      setErrorMsg('');
-      const agent = getAgent();
-      if (agent?.business_name) {
-        navigation.getParent()?.replace('Main');
-      } else {
-        navigation.getParent()?.replace('Setup');
+
+      if (mode === 'unlock') {
+        const stored = await SecureStore.getItemAsync('app_pin');
+        if (entered !== stored) {
+          setErrorMsg('Incorrect PIN. Try again.');
+          shake();
+          return;
+        }
+        setErrorMsg('');
+        const agent = await getAgent();
+        navigation.replace(agent?.business_name ? 'Main' : 'Setup');
       }
+    } catch (err) {
+      setErrorMsg(err?.message ?? 'Something went wrong. Please try again.');
+      shake();
     }
   }
 

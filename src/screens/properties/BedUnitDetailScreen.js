@@ -91,20 +91,31 @@ export default function BedUnitDetailScreen({ navigation, route }) {
   const [statusModalVisible, setStatusModalVisible] = useState(false);
   const [newStatus, setNewStatus]                   = useState('');
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    const b = getBedById(bedId);
-    setBed(b);
-    if (b) {
-      const r = getRoomById(b.room_id);
-      setRoom(r);
-      if (r) setProperty(getPropertyById(r.property_id));
-      setContract(getContractByBedId(bedId));
-      setPayments(getPaymentsByBed(bedId).slice(0, 5));
+    try {
+      const [b, agent] = await Promise.all([getBedById(bedId), getAgent()]);
+      setBed(b);
+      setCurrency(agent?.currency ?? 'AED');
+      if (b) {
+        const [r, c, pays] = await Promise.all([
+          getRoomById(b.room_id),
+          getContractByBedId(bedId),
+          getPaymentsByBed(bedId),
+        ]);
+        setRoom(r);
+        setContract(c);
+        setPayments(pays.slice(0, 5));
+        if (r) {
+          const prop = await getPropertyById(r.property_id);
+          setProperty(prop);
+        }
+      }
+    } catch (err) {
+      console.error('Bed load error:', err);
+    } finally {
+      setLoading(false);
     }
-    const agent = getAgent();
-    setCurrency(agent?.currency ?? 'AED');
-    setLoading(false);
   }, [bedId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -124,11 +135,11 @@ export default function BedUnitDetailScreen({ navigation, route }) {
     setEditModalVisible(true);
   }
 
-  function handleBedSave() {
+  async function handleBedSave() {
     if (!bedForm.label.trim()) { setBedFormError('Bed label is required.'); return; }
     setBedSaving(true);
     try {
-      updateBed(bedId, {
+      await updateBed(bedId, {
         bed_label:   bedForm.label.trim().toUpperCase(),
         status:      bedForm.status,
         owner_rent:  parseFloat(bedForm.ownerRent)  || 0,
@@ -136,7 +147,9 @@ export default function BedUnitDetailScreen({ navigation, route }) {
         commission:  parseFloat(bedForm.commission) || 0,
       });
       setEditModalVisible(false);
-      load();
+      await load();
+    } catch (err) {
+      setBedFormError(err?.message ?? 'Failed to save bed.');
     } finally {
       setBedSaving(false);
     }
@@ -160,10 +173,14 @@ export default function BedUnitDetailScreen({ navigation, route }) {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Confirm',
-          onPress: () => {
-            updateBedStatus(bedId, newStatus);
-            setStatusModalVisible(false);
-            load();
+          onPress: async () => {
+            try {
+              await updateBedStatus(bedId, newStatus);
+              setStatusModalVisible(false);
+              await load();
+            } catch (err) {
+              Alert.alert('Error', err?.message ?? 'Failed to change status.');
+            }
           },
         },
       ]
@@ -369,7 +386,7 @@ export default function BedUnitDetailScreen({ navigation, route }) {
                 <>
                   <Text style={styles.label}>Status</Text>
                   <View style={styles.pickerWrapper}>
-                    <Picker selectedValue={bedForm.status} onValueChange={(v) => setBedForm((f) => ({ ...f, status: v }))} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                    <Picker selectedValue={bedForm.status} onValueChange={(v) => setBedForm((f) => ({ ...f, status: v }))} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                       {['AVAILABLE', 'RESERVED', 'MAINTENANCE'].map((s) => <Picker.Item key={s} label={s} value={s} />)}
                     </Picker>
                   </View>
@@ -411,7 +428,7 @@ export default function BedUnitDetailScreen({ navigation, route }) {
             </Text>
             <Text style={styles.label}>New Status</Text>
             <View style={styles.pickerWrapper}>
-              <Picker selectedValue={newStatus} onValueChange={setNewStatus} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+              <Picker selectedValue={newStatus} onValueChange={setNewStatus} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                 {(STATUS_TRANSITIONS[bed.status] ?? []).map((s) => (
                   <Picker.Item key={s} label={s} value={s} />
                 ))}

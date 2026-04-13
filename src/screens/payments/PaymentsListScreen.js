@@ -101,7 +101,7 @@ function MonthYearModal({ visible, value, onConfirm, onClose }) {
             <View style={[styles.datePickerCol, { flex: 2 }]}>
               <Text style={styles.datePickerColLabel}>Month</Text>
               <View style={styles.pickerWrapper}>
-                <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                   {MONTHS.map((m, i) => <Picker.Item key={m} label={m} value={i + 1} />)}
                 </Picker>
               </View>
@@ -109,7 +109,7 @@ function MonthYearModal({ visible, value, onConfirm, onClose }) {
             <View style={styles.datePickerCol}>
               <Text style={styles.datePickerColLabel}>Year</Text>
               <View style={styles.pickerWrapper}>
-                <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                   {YEARS.map((y) => <Picker.Item key={y} label={String(y)} value={y} />)}
                 </Picker>
               </View>
@@ -142,7 +142,7 @@ function PaymentCard({ payment, currency, agent, expanded, onToggle }) {
     try {
       const pdf = await generateReceiptPDF(payment, { tenant_name: payment.tenant_name, tenant_email: payment.tenant_email, bed_label: payment.bed_label, property_name: payment.property_name }, agent);
       await sendReceiptEmail(pdf, payment, { tenant_name: payment.tenant_name, tenant_email: payment.tenant_email }, agent);
-      insertEmailLog({
+      await insertEmailLog({
         type:            'RECEIPT',
         tenancy_id:      payment.tenancy_id,
         recipient_email: payment.tenant_email,
@@ -151,7 +151,7 @@ function PaymentCard({ payment, currency, agent, expanded, onToggle }) {
       });
       Alert.alert('Sent', 'Receipt email sent successfully.');
     } catch (err) {
-      insertEmailLog({
+      await insertEmailLog({
         type:            'RECEIPT',
         tenancy_id:      payment.tenancy_id,
         recipient_email: payment.tenant_email ?? '',
@@ -262,13 +262,18 @@ export default function PaymentsListScreen() {
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
 
   // Load
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    setPayments(getAllPaymentsWithDetails());
-    const a = getAgent();
-    setAgent(a);
-    setCurrency(a?.currency ?? 'AED');
-    setLoading(false);
+    try {
+      const [list, a] = await Promise.all([getAllPaymentsWithDetails(), getAgent()]);
+      setPayments(list ?? []);
+      setAgent(a);
+      setCurrency(a?.currency ?? 'AED');
+    } catch (err) {
+      console.error('[PaymentsListScreen] load error:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));

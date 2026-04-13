@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Alert, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
+import { logOut } from '../../services/authService';
 
 function MenuItem({ icon, color, bg, label, subtitle, onPress }) {
   return (
@@ -19,26 +19,28 @@ function MenuItem({ icon, color, bg, label, subtitle, onPress }) {
 }
 
 export default function SettingsScreen({ navigation }) {
-  async function handleResetPin() {
-    await SecureStore.deleteItemAsync('app_pin');
-    navigation.getParent()?.getParent()?.replace('Auth');
-  }
-
-  async function handleLock() {
-    navigation.getParent()?.getParent()?.replace('Auth');
+  function rootNav() {
+    let nav = navigation;
+    while (nav.getParent && nav.getParent()) nav = nav.getParent();
+    return nav;
   }
 
   function handleSignOut() {
     Alert.alert(
       'Sign Out',
-      'Are you sure you want to sign out? You will need to enter your PIN to access the app again.',
+      'Are you sure you want to sign out? You will be logged out from this device.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Sign Out',
           style: 'destructive',
-          onPress: () => {
-            navigation.getParent()?.getParent()?.replace('Auth');
+          onPress: async () => {
+            try {
+              await logOut();
+              rootNav().replace('Auth');
+            } catch (err) {
+              Alert.alert('Error', err?.message ?? 'Failed to sign out.');
+            }
           },
         },
       ]
@@ -88,24 +90,6 @@ export default function SettingsScreen({ navigation }) {
           label="Backup & Restore"
           subtitle="Export or import your data"
           onPress={() => navigation.navigate('BackupScreen')}
-        />
-
-        <Text style={styles.sectionLabel}>SECURITY</Text>
-        <MenuItem
-          icon="lock-outline"
-          color="#26215C"
-          bg="#EEEDFE"
-          label="Lock App"
-          subtitle="Lock without signing out"
-          onPress={handleLock}
-        />
-        <MenuItem
-          icon="lock-reset"
-          color="#BA7517"
-          bg="#FEF3C7"
-          label="Reset PIN"
-          subtitle="You will need to set a new PIN"
-          onPress={handleResetPin}
         />
 
         <View style={{ height: 16 }} />

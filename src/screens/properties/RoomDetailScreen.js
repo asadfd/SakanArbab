@@ -78,16 +78,23 @@ export default function RoomDetailScreen({ navigation, route }) {
   const [bedFormError, setBedFormError]       = useState('');
   const [bedSaving, setBedSaving]             = useState(false);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    const r = getRoomById(roomId);
-    setRoom(r);
-    const bedList = getBedsByRoom(roomId);
-    setBeds(bedList);
-    setStats(getRoomStats(bedList));
-    const agent = getAgent();
-    setCurrency(agent?.currency ?? 'AED');
-    setLoading(false);
+    try {
+      const [r, bedList, agent] = await Promise.all([
+        getRoomById(roomId),
+        getBedsByRoom(roomId),
+        getAgent(),
+      ]);
+      setRoom(r);
+      setBeds(bedList);
+      setStats(getRoomStats(bedList));
+      setCurrency(agent?.currency ?? 'AED');
+    } catch (err) {
+      console.error('Room load error:', err);
+    } finally {
+      setLoading(false);
+    }
   }, [roomId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -101,17 +108,19 @@ export default function RoomDetailScreen({ navigation, route }) {
     setRoomModalVisible(true);
   }
 
-  function handleRoomSave() {
+  async function handleRoomSave() {
     if (!roomForm.name.trim()) { setRoomFormError('Room name is required.'); return; }
     setRoomSaving(true);
     try {
-      updateRoom(roomId, {
+      await updateRoom(roomId, {
         name: roomForm.name.trim(),
         floor: roomForm.floor.trim() || null,
         description: roomForm.description.trim() || null,
       });
       setRoomModalVisible(false);
-      load();
+      await load();
+    } catch (err) {
+      setRoomFormError(err?.message ?? 'Failed to save.');
     } finally {
       setRoomSaving(false);
     }
@@ -139,7 +148,7 @@ export default function RoomDetailScreen({ navigation, route }) {
     setBedModalVisible(true);
   }
 
-  function handleBedSave() {
+  async function handleBedSave() {
     if (!bedForm.label.trim()) { setBedFormError('Bed label is required.'); return; }
     setBedSaving(true);
     try {
@@ -151,12 +160,14 @@ export default function RoomDetailScreen({ navigation, route }) {
         commission:  parseFloat(bedForm.commission) || 0,
       };
       if (editingBed) {
-        updateBed(editingBed.id, payload);
+        await updateBed(editingBed.id, payload);
       } else {
-        insertBed({ room_id: roomId, ...payload });
+        await insertBed({ room_id: roomId, ...payload });
       }
       setBedModalVisible(false);
-      load();
+      await load();
+    } catch (err) {
+      setBedFormError(err?.message ?? 'Failed to save bed.');
     } finally {
       setBedSaving(false);
     }
@@ -301,7 +312,7 @@ export default function RoomDetailScreen({ navigation, route }) {
 
               <Text style={styles.label}>Status</Text>
               <View style={styles.pickerWrapper}>
-                <Picker selectedValue={bedForm.status} onValueChange={(v) => setBedForm((f) => ({ ...f, status: v }))} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                <Picker selectedValue={bedForm.status} onValueChange={(v) => setBedForm((f) => ({ ...f, status: v }))} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                   {STATUS_OPTIONS.map((s) => <Picker.Item key={s} label={s} value={s} />)}
                 </Picker>
               </View>

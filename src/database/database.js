@@ -1,490 +1,439 @@
-import * as SQLite from 'expo-sqlite';
+import { supabase } from '../services/supabase';
 
-const db = SQLite.openDatabaseSync('sakanarbab.db');
+// ─── USER ID CACHE ──────────────────────────────────────────────────────────
 
-// ─── SETUP ───────────────────────────────────────────────────────────────────
+let _userId = null;
 
-export function setupDatabase() {
-  db.execSync(`PRAGMA journal_mode = WAL;`);
-  db.execSync(`PRAGMA foreign_keys = ON;`);
-
-  db.execSync(`
-    CREATE TABLE IF NOT EXISTS agents (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      google_id TEXT UNIQUE NOT NULL,
-      full_name TEXT NOT NULL,
-      email TEXT NOT NULL,
-      photo_url TEXT,
-      access_token TEXT,
-      refresh_token TEXT,
-      business_name TEXT,
-      business_logo_uri TEXT,
-      business_phone TEXT,
-      business_email TEXT,
-      business_address TEXT,
-      business_tagline TEXT,
-      business_trn TEXT,
-      currency TEXT DEFAULT 'AED',
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  db.execSync(`
-    CREATE TABLE IF NOT EXISTS properties (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      address TEXT,
-      city TEXT,
-      description TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  db.execSync(`
-    CREATE TABLE IF NOT EXISTS rooms (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      property_id INTEGER NOT NULL,
-      name TEXT NOT NULL,
-      floor TEXT,
-      description TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (property_id) REFERENCES properties (id)
-    );
-  `);
-
-  db.execSync(`
-    CREATE TABLE IF NOT EXISTS bed_units (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      room_id INTEGER NOT NULL,
-      bed_label TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'AVAILABLE',
-      owner_rent REAL DEFAULT 0,
-      actual_rent REAL DEFAULT 0,
-      commission REAL DEFAULT 0,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (room_id) REFERENCES rooms (id)
-    );
-  `);
-
-  db.execSync(`
-    CREATE TABLE IF NOT EXISTS tenancy_contracts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      bed_unit_id INTEGER NOT NULL,
-      agent_id INTEGER NOT NULL,
-      tenant_name TEXT NOT NULL,
-      tenant_phone TEXT,
-      tenant_email TEXT,
-      tenant_id_no TEXT,
-      check_in_date TEXT NOT NULL,
-      check_out_date TEXT,
-      monthly_rent REAL NOT NULL,
-      deposit_amount REAL DEFAULT 0,
-      payment_due_day INTEGER DEFAULT 1,
-      status TEXT NOT NULL DEFAULT 'ACTIVE',
-      notes TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (bed_unit_id) REFERENCES bed_units (id),
-      FOREIGN KEY (agent_id) REFERENCES agents (id)
-    );
-  `);
-
-  db.execSync(`
-    CREATE TABLE IF NOT EXISTS payments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tenancy_id INTEGER NOT NULL,
-      bed_unit_id INTEGER NOT NULL,
-      agent_id INTEGER NOT NULL,
-      txn_no TEXT UNIQUE NOT NULL,
-      amount REAL NOT NULL,
-      payment_date TEXT NOT NULL,
-      payment_mode TEXT,
-      payment_for_month TEXT,
-      status TEXT NOT NULL DEFAULT 'PENDING',
-      notes TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (tenancy_id) REFERENCES tenancy_contracts (id),
-      FOREIGN KEY (bed_unit_id) REFERENCES bed_units (id),
-      FOREIGN KEY (agent_id) REFERENCES agents (id)
-    );
-  `);
-
-  db.execSync(`
-    CREATE TABLE IF NOT EXISTS expenses (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      property_id INTEGER NOT NULL,
-      category TEXT NOT NULL,
-      amount REAL NOT NULL,
-      expense_date TEXT NOT NULL,
-      description TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (property_id) REFERENCES properties (id)
-    );
-  `);
-
-  db.execSync(`
-    CREATE TABLE IF NOT EXISTS email_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      type TEXT NOT NULL,
-      tenancy_id INTEGER NOT NULL,
-      payment_id INTEGER,
-      recipient_email TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'PENDING',
-      sent_at TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (tenancy_id) REFERENCES tenancy_contracts (id)
-    );
-  `);
+export async function initUserId() {
+  const { data: { session } } = await supabase.auth.getSession();
+  _userId = session?.user?.id ?? null;
+  return _userId;
 }
 
-// ─── AGENTS ──────────────────────────────────────────────────────────────────
-
-export function saveLocalAgent() {
-  return db.runSync(
-    `INSERT INTO agents (google_id, full_name, email)
-     VALUES ('LOCAL_AGENT', 'Agent', 'local@sakanarbab')
-     ON CONFLICT(google_id) DO NOTHING`,
-    []
-  );
+export function getUserId() {
+  if (!_userId) throw new Error('User not authenticated');
+  return _userId;
 }
 
-export function saveAgent(agentData) {
-  const {
-    google_id, full_name, email, photo_url,
-    access_token, refresh_token, currency,
-  } = agentData;
-
-  return db.runSync(
-    `INSERT INTO agents (google_id, full_name, email, photo_url, access_token, refresh_token, currency)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(google_id) DO UPDATE SET
-       full_name = excluded.full_name,
-       email = excluded.email,
-       photo_url = excluded.photo_url,
-       access_token = excluded.access_token,
-       refresh_token = excluded.refresh_token,
-       currency = excluded.currency`,
-    [google_id, full_name, email, photo_url ?? null, access_token ?? null, refresh_token ?? null, currency ?? 'AED']
-  );
+export function clearUserId() {
+  _userId = null;
 }
 
-export function getAgent() {
-  return db.getFirstSync(`SELECT * FROM agents LIMIT 1`);
+// ─── SETUP ──────────────────────────────────────────────────────────────────
+
+export async function setupDatabase() {
+  await initUserId();
 }
 
-export function updateAgentProfile(profileData) {
+// ─── AGENTS ─────────────────────────────────────────────────────────────────
+
+export async function saveLocalAgent() {
+  const uid = getUserId();
+  const { data, error: selectErr } = await supabase
+    .from('agents')
+    .select('id')
+    .eq('user_id', uid)
+    .limit(1)
+    .maybeSingle();
+  if (selectErr) throw selectErr;
+  if (!data) {
+    const { error: insertErr } = await supabase.from('agents').insert({
+      user_id: uid,
+      google_id: 'LOCAL_AGENT',
+      full_name: 'Agent',
+      email: 'local@sakanarbab',
+    });
+    if (insertErr) throw insertErr;
+  }
+}
+
+export async function getAgent() {
+  const uid = getUserId();
+  const { data, error } = await supabase
+    .from('agents')
+    .select('*')
+    .eq('user_id', uid)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateAgentProfile(profileData) {
+  const uid = getUserId();
+  await saveLocalAgent();
+
   const {
     business_name, business_logo_uri, business_phone,
     business_email, business_address, business_tagline,
     business_trn, currency,
   } = profileData;
 
-  return db.runSync(
-    `UPDATE agents SET
-       business_name = ?,
-       business_logo_uri = ?,
-       business_phone = ?,
-       business_email = ?,
-       business_address = ?,
-       business_tagline = ?,
-       business_trn = ?,
-       currency = ?
-     WHERE id = (SELECT id FROM agents LIMIT 1)`,
-    [
-      business_name ?? null,
-      business_logo_uri ?? null,
-      business_phone ?? null,
-      business_email ?? null,
-      business_address ?? null,
-      business_tagline ?? null,
-      business_trn ?? null,
-      currency ?? 'AED',
-    ]
-  );
-}
-
-// ─── PROPERTIES ──────────────────────────────────────────────────────────────
-
-export function getAllProperties() {
-  return db.getAllSync(`SELECT * FROM properties ORDER BY created_at DESC`);
-}
-
-export function getPropertyById(id) {
-  return db.getFirstSync(`SELECT * FROM properties WHERE id = ?`, [id]);
-}
-
-export function insertProperty(data) {
-  const { name, address, city, description } = data;
-  return db.runSync(
-    `INSERT INTO properties (name, address, city, description) VALUES (?, ?, ?, ?)`,
-    [name, address ?? null, city ?? null, description ?? null]
-  );
-}
-
-export function updateProperty(id, data) {
-  const { name, address, city, description } = data;
-  return db.runSync(
-    `UPDATE properties SET name = ?, address = ?, city = ?, description = ? WHERE id = ?`,
-    [name, address ?? null, city ?? null, description ?? null, id]
-  );
-}
-
-export function deleteProperty(id) {
-  return db.runSync(`DELETE FROM properties WHERE id = ?`, [id]);
-}
-
-// ─── ROOMS ───────────────────────────────────────────────────────────────────
-
-export function getRoomsByProperty(propertyId) {
-  return db.getAllSync(
-    `SELECT * FROM rooms WHERE property_id = ? ORDER BY created_at ASC`,
-    [propertyId]
-  );
-}
-
-export function getRoomById(id) {
-  return db.getFirstSync(`SELECT * FROM rooms WHERE id = ?`, [id]);
-}
-
-export function insertRoom(data) {
-  const { property_id, name, floor, description } = data;
-  return db.runSync(
-    `INSERT INTO rooms (property_id, name, floor, description) VALUES (?, ?, ?, ?)`,
-    [property_id, name, floor ?? null, description ?? null]
-  );
-}
-
-export function updateRoom(id, data) {
-  const { name, floor, description } = data;
-  return db.runSync(
-    `UPDATE rooms SET name = ?, floor = ?, description = ? WHERE id = ?`,
-    [name, floor ?? null, description ?? null, id]
-  );
-}
-
-export function deleteRoom(id) {
-  return db.runSync(`DELETE FROM rooms WHERE id = ?`, [id]);
-}
-
-// ─── BED UNITS ───────────────────────────────────────────────────────────────
-
-export function getBedsByRoom(roomId) {
-  return db.getAllSync(
-    `SELECT * FROM bed_units WHERE room_id = ? ORDER BY bed_label ASC`,
-    [roomId]
-  );
-}
-
-export function getBedById(id) {
-  return db.getFirstSync(`SELECT * FROM bed_units WHERE id = ?`, [id]);
-}
-
-export function getAvailableBeds() {
-  return db.getAllSync(
-    `SELECT bu.*, r.name AS room_name, p.name AS property_name
-     FROM bed_units bu
-     JOIN rooms r ON r.id = bu.room_id
-     JOIN properties p ON p.id = r.property_id
-     WHERE bu.status = 'AVAILABLE'
-     ORDER BY p.name ASC, r.name ASC, bu.bed_label ASC`,
-    []
-  );
-}
-
-export function insertBed(data) {
-  const { room_id, bed_label, status, owner_rent, actual_rent, commission } = data;
-  return db.runSync(
-    `INSERT INTO bed_units (room_id, bed_label, status, owner_rent, actual_rent, commission)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [room_id, bed_label, status ?? 'AVAILABLE', owner_rent ?? 0, actual_rent ?? 0, commission ?? 0]
-  );
-}
-
-export function updateBed(id, data) {
-  const { bed_label, status, owner_rent, actual_rent, commission } = data;
-  return db.runSync(
-    `UPDATE bed_units SET bed_label = ?, status = ?, owner_rent = ?, actual_rent = ?, commission = ? WHERE id = ?`,
-    [bed_label, status, owner_rent ?? 0, actual_rent ?? 0, commission ?? 0, id]
-  );
-}
-
-export function deleteBed(id) {
-  return db.runSync(`DELETE FROM bed_units WHERE id = ?`, [id]);
-}
-
-export function updateBedStatus(id, status) {
-  return db.runSync(`UPDATE bed_units SET status = ? WHERE id = ?`, [status, id]);
-}
-
-// ─── TENANCY CONTRACTS ───────────────────────────────────────────────────────
-
-export function getAllContracts(status) {
-  if (status) {
-    return db.getAllSync(
-      `SELECT * FROM tenancy_contracts WHERE status = ? ORDER BY created_at DESC`,
-      [status]
-    );
+  const { data, error } = await supabase
+    .from('agents')
+    .update({
+      business_name: business_name ?? null,
+      business_logo_uri: business_logo_uri ?? null,
+      business_phone: business_phone ?? null,
+      business_email: business_email ?? null,
+      business_address: business_address ?? null,
+      business_tagline: business_tagline ?? null,
+      business_trn: business_trn ?? null,
+      currency: currency ?? 'AED',
+    })
+    .eq('user_id', uid)
+    .select();
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error('Profile update affected 0 rows. Please try again.');
   }
-  return db.getAllSync(`SELECT * FROM tenancy_contracts ORDER BY created_at DESC`);
 }
 
-export function getAllContractsWithDetails(status) {
-  const where = status ? `WHERE tc.status = '${status}'` : '';
-  return db.getAllSync(
-    `SELECT tc.*,
-            bu.bed_label,
-            r.name  AS room_name,
-            p.name  AS property_name
-     FROM tenancy_contracts tc
-     LEFT JOIN bed_units bu ON bu.id = tc.bed_unit_id
-     LEFT JOIN rooms r      ON r.id  = bu.room_id
-     LEFT JOIN properties p ON p.id  = r.property_id
-     ${where}
-     ORDER BY tc.created_at DESC`,
-    []
-  );
+// ─── PROPERTIES ─────────────────────────────────────────────────────────────
+
+export async function getAllProperties() {
+  const { data, error } = await supabase
+    .from('properties')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
 }
 
-export function getContractById(id) {
-  return db.getFirstSync(`SELECT * FROM tenancy_contracts WHERE id = ?`, [id]);
+export async function getPropertyById(id) {
+  const { data, error } = await supabase
+    .from('properties')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
-export function getContractByBedId(bedId) {
-  return db.getFirstSync(
-    `SELECT * FROM tenancy_contracts WHERE bed_unit_id = ? AND status = 'ACTIVE' LIMIT 1`,
-    [bedId]
-  );
+export async function insertProperty(d) {
+  const { name, address, city, description } = d;
+  const { data, error } = await supabase
+    .from('properties')
+    .insert({ user_id: getUserId(), name, address: address ?? null, city: city ?? null, description: description ?? null })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }
 
-export function insertContract(data) {
+export async function updateProperty(id, d) {
+  const { name, address, city, description } = d;
+  const { error } = await supabase
+    .from('properties')
+    .update({ name, address: address ?? null, city: city ?? null, description: description ?? null })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteProperty(id) {
+  const { error } = await supabase.from('properties').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ─── ROOMS ──────────────────────────────────────────────────────────────────
+
+export async function getRoomsByProperty(propertyId) {
+  const { data, error } = await supabase
+    .from('rooms')
+    .select('*')
+    .eq('property_id', propertyId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getRoomById(id) {
+  const { data, error } = await supabase
+    .from('rooms')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function insertRoom(d) {
+  const { property_id, name, floor, description } = d;
+  const { data, error } = await supabase
+    .from('rooms')
+    .insert({ user_id: getUserId(), property_id, name, floor: floor ?? null, description: description ?? null })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateRoom(id, d) {
+  const { name, floor, description } = d;
+  const { error } = await supabase
+    .from('rooms')
+    .update({ name, floor: floor ?? null, description: description ?? null })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteRoom(id) {
+  const { error } = await supabase.from('rooms').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ─── BED UNITS ──────────────────────────────────────────────────────────────
+
+export async function getBedsByRoom(roomId) {
+  const { data, error } = await supabase
+    .from('bed_units')
+    .select('*')
+    .eq('room_id', roomId)
+    .order('bed_label', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getBedById(id) {
+  const { data, error } = await supabase
+    .from('bed_units')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function getAvailableBeds() {
+  const { data, error } = await supabase
+    .from('bed_units')
+    .select('*, rooms!inner(name, property_id, properties!inner(name))')
+    .eq('status', 'AVAILABLE')
+    .order('bed_label', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((b) => ({
+    ...b,
+    room_name: b.rooms.name,
+    property_name: b.rooms.properties.name,
+  }));
+}
+
+export async function insertBed(d) {
+  const { room_id, bed_label, status, owner_rent, actual_rent, commission } = d;
+  const { data, error } = await supabase
+    .from('bed_units')
+    .insert({
+      user_id: getUserId(), room_id, bed_label,
+      status: status ?? 'AVAILABLE',
+      owner_rent: owner_rent ?? 0,
+      actual_rent: actual_rent ?? 0,
+      commission: commission ?? 0,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateBed(id, d) {
+  const { bed_label, status, owner_rent, actual_rent, commission } = d;
+  const { error } = await supabase
+    .from('bed_units')
+    .update({ bed_label, status, owner_rent: owner_rent ?? 0, actual_rent: actual_rent ?? 0, commission: commission ?? 0 })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteBed(id) {
+  const { error } = await supabase.from('bed_units').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function updateBedStatus(id, status) {
+  const { error } = await supabase.from('bed_units').update({ status }).eq('id', id);
+  if (error) throw error;
+}
+
+// ─── TENANCY CONTRACTS ──────────────────────────────────────────────────────
+
+export async function getAllContracts(status) {
+  let q = supabase.from('tenancy_contracts').select('*').order('created_at', { ascending: false });
+  if (status) q = q.eq('status', status);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getAllContractsWithDetails(status) {
+  let q = supabase
+    .from('tenancy_contracts')
+    .select('*, bed_units!inner(bed_label, room_id, rooms!inner(name, property_id, properties!inner(name)))')
+    .order('created_at', { ascending: false });
+  if (status) q = q.eq('status', status);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []).map((c) => ({
+    ...c,
+    bed_label: c.bed_units?.bed_label,
+    room_name: c.bed_units?.rooms?.name,
+    property_name: c.bed_units?.rooms?.properties?.name,
+  }));
+}
+
+export async function getContractById(id) {
+  const { data, error } = await supabase
+    .from('tenancy_contracts')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function getContractByBedId(bedId) {
+  const { data, error } = await supabase
+    .from('tenancy_contracts')
+    .select('*')
+    .eq('bed_unit_id', bedId)
+    .eq('status', 'ACTIVE')
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function insertContract(d) {
   const {
     bed_unit_id, agent_id, tenant_name, tenant_phone, tenant_email,
     tenant_id_no, check_in_date, check_out_date, monthly_rent,
     deposit_amount, payment_due_day, status, notes,
-  } = data;
+  } = d;
 
-  return db.runSync(
-    `INSERT INTO tenancy_contracts
-       (bed_unit_id, agent_id, tenant_name, tenant_phone, tenant_email,
-        tenant_id_no, check_in_date, check_out_date, monthly_rent,
-        deposit_amount, payment_due_day, status, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
+  const { data, error } = await supabase
+    .from('tenancy_contracts')
+    .insert({
+      user_id: getUserId(),
       bed_unit_id, agent_id, tenant_name,
-      tenant_phone ?? null, tenant_email ?? null, tenant_id_no ?? null,
-      check_in_date, check_out_date ?? null, monthly_rent,
-      deposit_amount ?? 0, payment_due_day ?? 1,
-      status ?? 'ACTIVE', notes ?? null,
-    ]
-  );
+      tenant_phone: tenant_phone ?? null,
+      tenant_email: tenant_email ?? null,
+      tenant_id_no: tenant_id_no ?? null,
+      check_in_date,
+      check_out_date: check_out_date ?? null,
+      monthly_rent,
+      deposit_amount: deposit_amount ?? 0,
+      payment_due_day: payment_due_day ?? 1,
+      status: status ?? 'ACTIVE',
+      notes: notes ?? null,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }
 
-export function endContract(id) {
-  const contract = getContractById(id);
+export async function endContract(id) {
+  const contract = await getContractById(id);
   if (!contract) return null;
 
-  db.runSync(
-    `UPDATE tenancy_contracts SET status = 'ENDED' WHERE id = ?`,
-    [id]
-  );
-  db.runSync(
-    `UPDATE bed_units SET status = 'AVAILABLE' WHERE id = ?`,
-    [contract.bed_unit_id]
-  );
+  const { error: contractErr } = await supabase
+    .from('tenancy_contracts')
+    .update({ status: 'ENDED' })
+    .eq('id', id);
+  if (contractErr) throw contractErr;
+
+  const { error: bedErr } = await supabase
+    .from('bed_units')
+    .update({ status: 'AVAILABLE' })
+    .eq('id', contract.bed_unit_id);
+  if (bedErr) throw bedErr;
 }
 
-export function getActiveContracts() {
-  return db.getAllSync(
-    `SELECT * FROM tenancy_contracts WHERE status = 'ACTIVE' ORDER BY created_at DESC`
-  );
+export async function getActiveContracts() {
+  const { data, error } = await supabase
+    .from('tenancy_contracts')
+    .select('*')
+    .eq('status', 'ACTIVE')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
 }
 
-// ─── PAYMENT GENERATION ─────────────────────────────────────────────────────
+// ─── PAYMENT GENERATION ────────────────────────────────────────────────────
 
-/**
- * Generate PENDING payment rows from check-in month through current month
- * for a given contract. Skips months that already have a payment record.
- */
-export function generatePendingPayments(contractId) {
-  const contract = getContractById(contractId);
+export async function generatePendingPayments(contractId) {
+  const contract = await getContractById(contractId);
   if (!contract) return;
 
-  const agent = getAgent();
+  const agent = await getAgent();
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-  // Start from check-in month
   const start = new Date(contract.check_in_date + 'T00:00:00');
   let year = start.getFullYear();
-  let month = start.getMonth(); // 0-based
+  let month = start.getMonth();
+
+  const inserts = [];
 
   while (true) {
     const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
     if (monthKey > currentMonth) break;
 
-    // If contract has check-out and this month is past it, stop
     if (contract.check_out_date) {
       const endMonth = contract.check_out_date.substring(0, 7);
       if (monthKey > endMonth) break;
     }
 
-    // Check if payment already exists for this month
-    const existing = db.getFirstSync(
-      `SELECT id FROM payments WHERE tenancy_id = ? AND payment_for_month = ? LIMIT 1`,
-      [contractId, monthKey]
-    );
+    // Check if payment exists
+    const { data: existing } = await supabase
+      .from('payments')
+      .select('id')
+      .eq('tenancy_id', contractId)
+      .eq('payment_for_month', monthKey)
+      .limit(1)
+      .maybeSingle();
 
     if (!existing) {
-      const txn = `AUTO-${contractId}-${monthKey}`;
-      db.runSync(
-        `INSERT INTO payments
-           (tenancy_id, bed_unit_id, agent_id, txn_no, amount,
-            payment_date, payment_mode, payment_for_month, status, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)`,
-        [
-          contractId,
-          contract.bed_unit_id,
-          agent?.id ?? contract.agent_id,
-          txn,
-          contract.monthly_rent,
-          `${monthKey}-${String(contract.payment_due_day ?? 1).padStart(2, '0')}`,
-          null,
-          monthKey,
-          'Auto-generated pending payment',
-        ]
-      );
+      inserts.push({
+        user_id: getUserId(),
+        tenancy_id: contractId,
+        bed_unit_id: contract.bed_unit_id,
+        agent_id: agent?.id ?? contract.agent_id,
+        txn_no: `AUTO-${contractId}-${monthKey}`,
+        amount: contract.monthly_rent,
+        payment_date: `${monthKey}-${String(contract.payment_due_day ?? 1).padStart(2, '0')}`,
+        payment_mode: null,
+        payment_for_month: monthKey,
+        status: 'PENDING',
+        notes: 'Auto-generated pending payment',
+      });
     }
 
-    // Next month
     month++;
     if (month > 11) { month = 0; year++; }
   }
-}
 
-/**
- * For ALL active contracts, ensure pending payments exist up to current month.
- * Called on app load / dashboard focus.
- */
-export function ensureMonthlyPayments() {
-  const activeContracts = getActiveContracts();
-  for (const c of activeContracts) {
-    generatePendingPayments(c.id);
+  if (inserts.length > 0) {
+    const { error } = await supabase.from('payments').insert(inserts);
+    if (error) throw error;
   }
 }
 
-/**
- * Check if a contract can be ended.
- * Rule: last 3 months' payments must be PAID. If contract is shorter than 3 months,
- * ALL payments must be PAID.
- */
-export function canEndContract(contractId) {
-  const payments = db.getAllSync(
-    `SELECT payment_for_month, status FROM payments
-     WHERE tenancy_id = ?
-     ORDER BY payment_for_month DESC`,
-    [contractId]
-  );
+export async function ensureMonthlyPayments() {
+  const activeContracts = await getActiveContracts();
+  for (const c of activeContracts) {
+    await generatePendingPayments(c.id);
+  }
+}
 
-  if (payments.length === 0) {
+export async function canEndContract(contractId) {
+  const { data: payments, error } = await supabase
+    .from('payments')
+    .select('payment_for_month, status')
+    .eq('tenancy_id', contractId)
+    .order('payment_for_month', { ascending: false });
+  if (error) throw error;
+
+  if (!payments || payments.length === 0) {
     return { allowed: false, reason: 'No payment records found. At least one payment must be logged and marked PAID.' };
   }
 
@@ -503,276 +452,426 @@ export function canEndContract(contractId) {
   return { allowed: true, reason: null };
 }
 
-/**
- * Find existing PENDING payment for a contract+month.
- * Returns the payment row or null.
- */
-export function getPendingPaymentForMonth(tenancyId, monthKey) {
-  return db.getFirstSync(
-    `SELECT * FROM payments WHERE tenancy_id = ? AND payment_for_month = ? AND status = 'PENDING' LIMIT 1`,
-    [tenancyId, monthKey]
-  );
+export async function getPendingPaymentForMonth(tenancyId, monthKey) {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('tenancy_id', tenancyId)
+    .eq('payment_for_month', monthKey)
+    .eq('status', 'PENDING')
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
-/**
- * Update a PENDING payment to PAID with transaction details.
- */
-export function updatePaymentToPaid(paymentId, data) {
-  const { txn_no, amount, payment_date, payment_mode, notes } = data;
-  return db.runSync(
-    `UPDATE payments
-     SET txn_no = ?, amount = ?, payment_date = ?, payment_mode = ?, status = 'PAID', notes = ?
-     WHERE id = ? AND status = 'PENDING'`,
-    [txn_no, amount, payment_date, payment_mode ?? null, notes ?? null, paymentId]
-  );
+export async function updatePaymentToPaid(paymentId, d) {
+  const { txn_no, amount, payment_date, payment_mode, notes } = d;
+  const { error } = await supabase
+    .from('payments')
+    .update({
+      txn_no,
+      amount,
+      payment_date,
+      payment_mode: payment_mode ?? null,
+      status: 'PAID',
+      notes: notes ?? null,
+    })
+    .eq('id', paymentId)
+    .eq('status', 'PENDING');
+  if (error) throw error;
 }
 
-// ─── PAYMENTS ────────────────────────────────────────────────────────────────
+// ─── PAYMENTS ───────────────────────────────────────────────────────────────
 
-export function getAllPayments() {
-  return db.getAllSync(`SELECT * FROM payments ORDER BY payment_date DESC`);
+export async function getAllPayments() {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('*')
+    .order('payment_date', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
 }
 
-export function getAllPaymentsWithDetails() {
-  return db.getAllSync(
-    `SELECT p.*,
-            tc.tenant_name,
-            tc.tenant_email,
-            bu.bed_label,
-            r.name  AS room_name,
-            r.id    AS room_id,
-            prop.name AS property_name,
-            a.full_name AS agent_name
-     FROM payments p
-     LEFT JOIN tenancy_contracts tc ON tc.id = p.tenancy_id
-     LEFT JOIN bed_units bu         ON bu.id = p.bed_unit_id
-     LEFT JOIN rooms r              ON r.id  = bu.room_id
-     LEFT JOIN properties prop      ON prop.id = r.property_id
-     LEFT JOIN agents a             ON a.id  = p.agent_id
-     ORDER BY p.created_at DESC`,
-    []
-  );
+export async function getAllPaymentsWithDetails() {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('*, tenancy_contracts!inner(tenant_name, tenant_email), bed_units!inner(bed_label, room_id, rooms!inner(name, property_id, properties!inner(name))), agents!inner(full_name)')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((p) => ({
+    ...p,
+    tenant_name: p.tenancy_contracts?.tenant_name,
+    tenant_email: p.tenancy_contracts?.tenant_email,
+    bed_label: p.bed_units?.bed_label,
+    room_name: p.bed_units?.rooms?.name,
+    room_id: p.bed_units?.room_id,
+    property_name: p.bed_units?.rooms?.properties?.name,
+    agent_name: p.agents?.full_name,
+  }));
 }
 
-export function getPaymentsByTenancy(tenancyId) {
-  return db.getAllSync(
-    `SELECT * FROM payments WHERE tenancy_id = ? ORDER BY payment_date DESC`,
-    [tenancyId]
-  );
+export async function getPaymentsByTenancy(tenancyId) {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('tenancy_id', tenancyId)
+    .order('payment_date', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
 }
 
-export function getPaymentsByBed(bedId) {
-  return db.getAllSync(
-    `SELECT * FROM payments WHERE bed_unit_id = ? ORDER BY payment_date DESC`,
-    [bedId]
-  );
+export async function getPaymentsByBed(bedId) {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('bed_unit_id', bedId)
+    .order('payment_date', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
 }
 
-export function insertPayment(data) {
+export async function insertPayment(d) {
   const {
     tenancy_id, bed_unit_id, agent_id, txn_no, amount,
     payment_date, payment_mode, payment_for_month, status, notes,
-  } = data;
+  } = d;
 
-  return db.runSync(
-    `INSERT INTO payments
-       (tenancy_id, bed_unit_id, agent_id, txn_no, amount,
-        payment_date, payment_mode, payment_for_month, status, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
+  const { data, error } = await supabase
+    .from('payments')
+    .insert({
+      user_id: getUserId(),
       tenancy_id, bed_unit_id, agent_id, txn_no, amount,
-      payment_date, payment_mode ?? null,
-      payment_for_month ?? null, status ?? 'PENDING', notes ?? null,
-    ]
-  );
+      payment_date,
+      payment_mode: payment_mode ?? null,
+      payment_for_month: payment_for_month ?? null,
+      status: status ?? 'PENDING',
+      notes: notes ?? null,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }
 
-export function checkTxnExists(txnNo) {
-  const row = db.getFirstSync(
-    `SELECT id FROM payments WHERE txn_no = ? LIMIT 1`,
-    [txnNo]
-  );
-  return !!row;
+export async function checkTxnExists(txnNo) {
+  const { data } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('txn_no', txnNo)
+    .limit(1)
+    .maybeSingle();
+  return !!data;
 }
 
-export function getPaymentsThisMonth() {
+export async function getPaymentsThisMonth() {
   const now = new Date();
   const monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  return db.getAllSync(
-    `SELECT * FROM payments WHERE payment_for_month = ? ORDER BY payment_date DESC`,
-    [monthYear]
-  );
+  const { data, error } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('payment_for_month', monthYear)
+    .order('payment_date', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
 }
 
-// ─── EXPENSES ────────────────────────────────────────────────────────────────
+// ─── EXPENSES ───────────────────────────────────────────────────────────────
 
-export function getExpensesByProperty(propertyId) {
-  return db.getAllSync(
-    `SELECT * FROM expenses WHERE property_id = ? ORDER BY expense_date DESC`,
-    [propertyId]
-  );
+export async function getExpensesByProperty(propertyId) {
+  const { data, error } = await supabase
+    .from('expenses')
+    .select('*')
+    .eq('property_id', propertyId)
+    .order('expense_date', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
 }
 
-export function insertExpense(data) {
-  const { property_id, category, amount, expense_date, description } = data;
-  return db.runSync(
-    `INSERT INTO expenses (property_id, category, amount, expense_date, description)
-     VALUES (?, ?, ?, ?, ?)`,
-    [property_id, category, amount, expense_date, description ?? null]
-  );
+export async function insertExpense(d) {
+  const { property_id, category, amount, expense_date, description } = d;
+  const { data, error } = await supabase
+    .from('expenses')
+    .insert({
+      user_id: getUserId(),
+      property_id, category, amount, expense_date,
+      description: description ?? null,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }
 
-export function updateExpense(id, data) {
-  const { category, amount, expense_date, description } = data;
-  return db.runSync(
-    `UPDATE expenses SET category = ?, amount = ?, expense_date = ?, description = ? WHERE id = ?`,
-    [category, amount, expense_date, description ?? null, id]
-  );
+export async function updateExpense(id, d) {
+  const { category, amount, expense_date, description } = d;
+  const { error } = await supabase
+    .from('expenses')
+    .update({ category, amount, expense_date, description: description ?? null })
+    .eq('id', id);
+  if (error) throw error;
 }
 
-export function deleteExpense(id) {
-  return db.runSync(`DELETE FROM expenses WHERE id = ?`, [id]);
+export async function deleteExpense(id) {
+  const { error } = await supabase.from('expenses').delete().eq('id', id);
+  if (error) throw error;
 }
 
-export function getExpensesByPropertyAndMonth(propertyId, monthYear) {
-  // monthYear format: 'YYYY-MM'
-  return db.getAllSync(
-    `SELECT * FROM expenses
-     WHERE property_id = ? AND strftime('%Y-%m', expense_date) = ?
-     ORDER BY expense_date DESC`,
-    [propertyId, monthYear]
-  );
+export async function getExpensesByPropertyAndMonth(propertyId, monthYear) {
+  const { data, error } = await supabase
+    .from('expenses')
+    .select('*')
+    .eq('property_id', propertyId)
+    .gte('expense_date', monthYear + '-01')
+    .lte('expense_date', monthYear + '-31')
+    .order('expense_date', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
 }
 
-// ─── EMAIL LOGS ──────────────────────────────────────────────────────────────
+// ─── EMAIL LOGS ─────────────────────────────────────────────────────────────
 
-export function insertEmailLog(data) {
-  const { type, tenancy_id, payment_id, recipient_email, status, sent_at } = data;
-  return db.runSync(
-    `INSERT INTO email_logs (type, tenancy_id, payment_id, recipient_email, status, sent_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [type, tenancy_id, payment_id ?? null, recipient_email, status ?? 'PENDING', sent_at ?? null]
-  );
+export async function insertEmailLog(d) {
+  const { type, tenancy_id, payment_id, recipient_email, status, sent_at } = d;
+  const { error } = await supabase
+    .from('email_logs')
+    .insert({
+      user_id: getUserId(),
+      type, tenancy_id,
+      payment_id: payment_id ?? null,
+      recipient_email,
+      status: status ?? 'PENDING',
+      sent_at: sent_at ?? null,
+    });
+  if (error) throw error;
 }
 
-export function getEmailLogs() {
-  return db.getAllSync(`SELECT * FROM email_logs ORDER BY created_at DESC`);
+export async function getEmailLogs() {
+  const { data, error } = await supabase
+    .from('email_logs')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
 }
 
-// ─── OVERDUE ─────────────────────────────────────────────────────────────────
+// ─── OVERDUE ────────────────────────────────────────────────────────────────
 
-export function getOverdueTenants() {
+export async function getOverdueTenants() {
   const now = new Date();
   const today = now.getDate();
   const monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-  return db.getAllSync(
-    `SELECT tc.*
-     FROM tenancy_contracts tc
-     WHERE tc.status = 'ACTIVE'
-       AND ? > tc.payment_due_day
-       AND NOT EXISTS (
-         SELECT 1 FROM payments p
-         WHERE p.tenancy_id = tc.id
-           AND p.payment_for_month = ?
-           AND p.status = 'PAID'
-       )
-     ORDER BY tc.tenant_name ASC`,
-    [today, monthYear]
-  );
+  // Get active contracts where due day has passed
+  const { data: activeContracts, error: cErr } = await supabase
+    .from('tenancy_contracts')
+    .select('*')
+    .eq('status', 'ACTIVE')
+    .lt('payment_due_day', today);
+  if (cErr) throw cErr;
+  if (!activeContracts || activeContracts.length === 0) return [];
+
+  // Get paid payments for this month
+  const { data: paidPayments, error: pErr } = await supabase
+    .from('payments')
+    .select('tenancy_id')
+    .eq('payment_for_month', monthYear)
+    .eq('status', 'PAID');
+  if (pErr) throw pErr;
+
+  const paidIds = new Set((paidPayments ?? []).map((p) => p.tenancy_id));
+  return activeContracts.filter((c) => !paidIds.has(c.id));
 }
 
-// ─── P&L ─────────────────────────────────────────────────────────────────────
+// ─── DASHBOARD HELPERS ──────────────────────────────────────────────────────
 
-export function getPLByProperty(propertyId, monthYear) {
-  // monthYear format: 'YYYY-MM'
+export async function getDashboardStats() {
+  const { data: allBeds } = await supabase.from('bed_units').select('status');
+  const totalBeds = allBeds?.length ?? 0;
+  const occupiedBeds = allBeds?.filter((b) => b.status === 'OCCUPIED').length ?? 0;
+  const availableBeds = allBeds?.filter((b) => b.status === 'AVAILABLE').length ?? 0;
 
-  // Income: sum of PAID payments for beds in this property this month
-  const incomeRow = db.getFirstSync(
-    `SELECT COALESCE(SUM(p.amount), 0) AS income
-     FROM payments p
-     JOIN bed_units bu ON bu.id = p.bed_unit_id
-     JOIN rooms r ON r.id = bu.room_id
-     WHERE r.property_id = ?
-       AND p.payment_for_month = ?
-       AND p.status = 'PAID'`,
-    [propertyId, monthYear]
-  );
+  const properties = await getAllProperties();
+  const totalProperties = properties.length;
 
-  // Owner cost: sum of owner_rent for OCCUPIED beds this month in this property
-  const ownerCostRow = db.getFirstSync(
-    `SELECT COALESCE(SUM(bu.owner_rent), 0) AS owner_cost
-     FROM bed_units bu
-     JOIN rooms r ON r.id = bu.room_id
-     JOIN tenancy_contracts tc ON tc.bed_unit_id = bu.id
-     WHERE r.property_id = ?
-       AND tc.status = 'ACTIVE'
-       AND strftime('%Y-%m', tc.check_in_date) <= ?`,
-    [propertyId, monthYear]
-  );
+  return { totalBeds, occupiedBeds, availableBeds, totalProperties };
+}
 
-  // Commission: sum of commission for OCCUPIED beds this month in this property
-  const commissionRow = db.getFirstSync(
-    `SELECT COALESCE(SUM(bu.commission), 0) AS commission
-     FROM bed_units bu
-     JOIN rooms r ON r.id = bu.room_id
-     JOIN tenancy_contracts tc ON tc.bed_unit_id = bu.id
-     WHERE r.property_id = ?
-       AND tc.status = 'ACTIVE'
-       AND strftime('%Y-%m', tc.check_in_date) <= ?`,
-    [propertyId, monthYear]
-  );
+export async function getRecentPayments(limit = 5) {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('*, tenancy_contracts!inner(tenant_name)')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map((p) => ({
+    ...p,
+    tenant_name: p.tenancy_contracts?.tenant_name,
+  }));
+}
 
-  // Expenses: sum of expenses for this property this month
-  const expensesRow = db.getFirstSync(
-    `SELECT COALESCE(SUM(amount), 0) AS expenses
-     FROM expenses
-     WHERE property_id = ?
-       AND strftime('%Y-%m', expense_date) = ?`,
-    [propertyId, monthYear]
-  );
+// ─── OVERDUE DETAILS (for OverdueScreen) ────────────────────────────────────
 
-  const income = incomeRow?.income ?? 0;
-  const owner_cost = ownerCostRow?.owner_cost ?? 0;
-  const commission = commissionRow?.commission ?? 0;
-  const expenses = expensesRow?.expenses ?? 0;
+export async function getOverdueTenantsWithDetails() {
+  const now = new Date();
+  const today = now.getDate();
+  const monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  const { data: activeContracts, error: cErr } = await supabase
+    .from('tenancy_contracts')
+    .select('*, bed_units!inner(bed_label, room_id, rooms!inner(name, property_id, properties!inner(name)))')
+    .eq('status', 'ACTIVE')
+    .lt('payment_due_day', today);
+  if (cErr) throw cErr;
+  if (!activeContracts || activeContracts.length === 0) return [];
+
+  const { data: paidPayments } = await supabase
+    .from('payments')
+    .select('tenancy_id')
+    .eq('payment_for_month', monthYear)
+    .eq('status', 'PAID');
+
+  const paidIds = new Set((paidPayments ?? []).map((p) => p.tenancy_id));
+
+  return activeContracts
+    .filter((c) => !paidIds.has(c.id))
+    .map((c) => ({
+      contract_id: c.id,
+      tenant_name: c.tenant_name,
+      monthly_rent: c.monthly_rent,
+      payment_due_day: c.payment_due_day,
+      bed_label: c.bed_units?.bed_label,
+      room_name: c.bed_units?.rooms?.name,
+      property_name: c.bed_units?.rooms?.properties?.name,
+    }));
+}
+
+// ─── PROPERTY STATS ─────────────────────────────────────────────────────────
+
+export async function getPropertyStats(propertyId) {
+  const { data: rooms } = await supabase.from('rooms').select('id').eq('property_id', propertyId);
+  const roomIds = (rooms ?? []).map((r) => r.id);
+  const roomCount = roomIds.length;
+
+  if (roomCount === 0) return { roomCount: 0, bedCount: 0, availCount: 0 };
+
+  const { data: beds } = await supabase.from('bed_units').select('status').in('room_id', roomIds);
+  const bedCount = beds?.length ?? 0;
+  const availCount = beds?.filter((b) => b.status === 'AVAILABLE').length ?? 0;
+
+  return { roomCount, bedCount, availCount };
+}
+
+export async function hasActiveContracts(roomId) {
+  const { data: beds } = await supabase.from('bed_units').select('id').eq('room_id', roomId);
+  if (!beds || beds.length === 0) return false;
+  const bedIds = beds.map((b) => b.id);
+
+  const { count } = await supabase
+    .from('tenancy_contracts')
+    .select('id', { count: 'exact', head: true })
+    .in('bed_unit_id', bedIds)
+    .eq('status', 'ACTIVE');
+  return (count ?? 0) > 0;
+}
+
+// ─── P&L ────────────────────────────────────────────────────────────────────
+
+export async function getPLByProperty(propertyId, monthYear) {
+  // Get room IDs for this property
+  const { data: rooms } = await supabase.from('rooms').select('id').eq('property_id', propertyId);
+  const roomIds = (rooms ?? []).map((r) => r.id);
+
+  if (roomIds.length === 0) {
+    return { income: 0, owner_cost: 0, commission: 0, expenses: 0, net_profit: 0 };
+  }
+
+  // Get bed IDs for these rooms
+  const { data: beds } = await supabase
+    .from('bed_units')
+    .select('id, owner_rent, commission')
+    .in('room_id', roomIds);
+  const bedIds = (beds ?? []).map((b) => b.id);
+
+  // Income: PAID payments for these beds this month
+  let income = 0;
+  if (bedIds.length > 0) {
+    const { data: paidPayments } = await supabase
+      .from('payments')
+      .select('amount')
+      .in('bed_unit_id', bedIds)
+      .eq('payment_for_month', monthYear)
+      .eq('status', 'PAID');
+    income = (paidPayments ?? []).reduce((sum, p) => sum + (p.amount ?? 0), 0);
+  }
+
+  // Owner cost + commission: for active contracts on these beds
+  let owner_cost = 0;
+  let commission = 0;
+  if (bedIds.length > 0) {
+    const { data: activeContracts } = await supabase
+      .from('tenancy_contracts')
+      .select('bed_unit_id')
+      .in('bed_unit_id', bedIds)
+      .eq('status', 'ACTIVE')
+      .lte('check_in_date', monthYear + '-31');
+
+    const activeBedIds = new Set((activeContracts ?? []).map((c) => c.bed_unit_id));
+    for (const b of beds ?? []) {
+      if (activeBedIds.has(b.id)) {
+        owner_cost += b.owner_rent ?? 0;
+        commission += b.commission ?? 0;
+      }
+    }
+  }
+
+  // Expenses
+  const { data: expenseRows } = await supabase
+    .from('expenses')
+    .select('amount')
+    .eq('property_id', propertyId)
+    .gte('expense_date', monthYear + '-01')
+    .lte('expense_date', monthYear + '-31');
+  const expenses = (expenseRows ?? []).reduce((sum, e) => sum + (e.amount ?? 0), 0);
+
   const net_profit = income - owner_cost - expenses;
-
   return { income, owner_cost, commission, expenses, net_profit };
 }
 
-export function getPLSummary(monthYear) {
-  // monthYear format: 'YYYY-MM'
+export async function getPLSummary(monthYear) {
+  // Total income
+  const { data: paidPayments } = await supabase
+    .from('payments')
+    .select('amount')
+    .eq('payment_for_month', monthYear)
+    .eq('status', 'PAID');
+  const total_income = (paidPayments ?? []).reduce((sum, p) => sum + (p.amount ?? 0), 0);
 
-  const incomeRow = db.getFirstSync(
-    `SELECT COALESCE(SUM(amount), 0) AS total_income
-     FROM payments
-     WHERE payment_for_month = ? AND status = 'PAID'`,
-    [monthYear]
-  );
+  // Total owner cost
+  const { data: activeContracts } = await supabase
+    .from('tenancy_contracts')
+    .select('bed_unit_id')
+    .eq('status', 'ACTIVE')
+    .lte('check_in_date', monthYear + '-31');
 
-  const ownerCostRow = db.getFirstSync(
-    `SELECT COALESCE(SUM(bu.owner_rent), 0) AS total_owner_cost
-     FROM bed_units bu
-     JOIN tenancy_contracts tc ON tc.bed_unit_id = bu.id
-     WHERE tc.status = 'ACTIVE'
-       AND strftime('%Y-%m', tc.check_in_date) <= ?`,
-    [monthYear]
-  );
+  let total_owner_cost = 0;
+  if (activeContracts && activeContracts.length > 0) {
+    const bedIds = activeContracts.map((c) => c.bed_unit_id);
+    const { data: beds } = await supabase
+      .from('bed_units')
+      .select('owner_rent')
+      .in('id', bedIds);
+    total_owner_cost = (beds ?? []).reduce((sum, b) => sum + (b.owner_rent ?? 0), 0);
+  }
 
-  const expensesRow = db.getFirstSync(
-    `SELECT COALESCE(SUM(amount), 0) AS total_expenses
-     FROM expenses
-     WHERE strftime('%Y-%m', expense_date) = ?`,
-    [monthYear]
-  );
+  // Total expenses
+  const { data: expenseRows } = await supabase
+    .from('expenses')
+    .select('amount')
+    .gte('expense_date', monthYear + '-01')
+    .lte('expense_date', monthYear + '-31');
+  const total_expenses = (expenseRows ?? []).reduce((sum, e) => sum + (e.amount ?? 0), 0);
 
-  const total_income = incomeRow?.total_income ?? 0;
-  const total_owner_cost = ownerCostRow?.total_owner_cost ?? 0;
-  const total_expenses = expensesRow?.total_expenses ?? 0;
   const net_profit = total_income - total_owner_cost - total_expenses;
-
   return { total_income, total_owner_cost, total_expenses, net_profit };
 }
-
-export default db;

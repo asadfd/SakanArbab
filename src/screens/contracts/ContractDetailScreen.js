@@ -127,28 +127,34 @@ export default function ContractDetailScreen({ navigation, route }) {
   const [loading, setLoading]     = useState(true);
   const [emailBusy, setEmailBusy] = useState(false);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    const c = getContractById(contractId);
-    setContract(c);
+    try {
+      const [c, a] = await Promise.all([getContractById(contractId), getAgent()]);
+      setContract(c);
+      setAgent(a);
+      setCurrency(a?.currency ?? 'AED');
 
-    if (c) {
-      const b = getBedById(c.bed_unit_id);
-      setBed(b);
-      if (b) {
-        const r = getRoomById(b.room_id);
-        setRoom(r);
-        setProperty(r ? getPropertyById(r.property_id) : null);
+      if (c) {
+        const [b, pays, overdueList] = await Promise.all([
+          getBedById(c.bed_unit_id),
+          getPaymentsByTenancy(contractId),
+          getOverdueTenants(),
+        ]);
+        setBed(b);
+        setPayments(pays);
+        setIsOverdue(overdueList.some((o) => o.id === contractId));
+        if (b) {
+          const r = await getRoomById(b.room_id);
+          setRoom(r);
+          setProperty(r ? await getPropertyById(r.property_id) : null);
+        }
       }
-      setPayments(getPaymentsByTenancy(contractId));
-      const overdueList = getOverdueTenants();
-      setIsOverdue(overdueList.some((o) => o.id === contractId));
+    } catch (err) {
+      console.error('Contract load error:', err);
+    } finally {
+      setLoading(false);
     }
-
-    const a = getAgent();
-    setAgent(a);
-    setCurrency(a?.currency ?? 'AED');
-    setLoading(false);
   }, [contractId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -178,8 +184,14 @@ export default function ContractDetailScreen({ navigation, route }) {
 
   // ─── End tenancy ─────────────────────────────────────────────────────────────
 
-  function handleEndTenancy() {
-    const check = canEndContract(contractId);
+  async function handleEndTenancy() {
+    let check;
+    try {
+      check = await canEndContract(contractId);
+    } catch (err) {
+      Alert.alert('Error', err?.message ?? 'Failed to validate contract.');
+      return;
+    }
     if (!check.allowed) {
       Alert.alert('Cannot End Tenancy', check.reason);
       return;
@@ -193,11 +205,15 @@ export default function ContractDetailScreen({ navigation, route }) {
         {
           text: 'End Tenancy',
           style: 'destructive',
-          onPress: () => {
-            endContract(contractId);
-            Alert.alert('Done', 'Tenancy ended. Bed is now available.', [
-              { text: 'OK', onPress: () => { load(); } },
-            ]);
+          onPress: async () => {
+            try {
+              await endContract(contractId);
+              Alert.alert('Done', 'Tenancy ended. Bed is now available.', [
+                { text: 'OK', onPress: () => { load(); } },
+              ]);
+            } catch (err) {
+              Alert.alert('Error', err?.message ?? 'Failed to end tenancy.');
+            }
           },
         },
       ]
@@ -226,17 +242,20 @@ export default function ContractDetailScreen({ navigation, route }) {
     setEditError('');
   }
 
-  function handleSavePayment() {
+  async function handleSavePayment() {
     const txn = editTxn.trim();
     if (!txn) { setEditError('Transaction number is required'); return; }
-    if (checkTxnExists(txn)) { setEditError('Transaction number already exists'); return; }
     const amt = parseFloat(editAmount);
     if (!editAmount || isNaN(amt) || amt <= 0) { setEditError('Amount must be greater than 0'); return; }
     if (!editDate) { setEditError('Payment date is required'); return; }
 
     setEditSaving(true);
     try {
-      updatePaymentToPaid(editPayment.id, {
+      if (await checkTxnExists(txn)) {
+        setEditError('Transaction number already exists');
+        return;
+      }
+      await updatePaymentToPaid(editPayment.id, {
         txn_no: txn,
         amount: amt,
         payment_date: editDate,
@@ -244,7 +263,7 @@ export default function ContractDetailScreen({ navigation, route }) {
         notes: editNotes.trim() || null,
       });
       setEditPayment(null);
-      load();
+      await load();
     } catch (err) {
       setEditError(err.message ?? 'Failed to update payment');
     } finally {

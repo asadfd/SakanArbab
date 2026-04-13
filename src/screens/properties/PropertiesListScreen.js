@@ -21,25 +21,8 @@ import {
   insertProperty,
   updateProperty,
   deleteProperty,
+  getPropertyStats,
 } from '../../database/database';
-import db from '../../database/database';
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function getPropertyStats(propertyId) {
-  const roomCount = db.getFirstSync(
-    `SELECT COUNT(*) AS c FROM rooms WHERE property_id = ?`, [propertyId]
-  )?.c ?? 0;
-  const bedCount = db.getFirstSync(
-    `SELECT COUNT(*) AS c FROM bed_units bu JOIN rooms r ON r.id = bu.room_id WHERE r.property_id = ?`,
-    [propertyId]
-  )?.c ?? 0;
-  const availCount = db.getFirstSync(
-    `SELECT COUNT(*) AS c FROM bed_units bu JOIN rooms r ON r.id = bu.room_id WHERE r.property_id = ? AND bu.status = 'AVAILABLE'`,
-    [propertyId]
-  )?.c ?? 0;
-  return { roomCount, bedCount, availCount };
-}
 
 const EMPTY_FORM = { name: '', address: '', city: '', description: '' };
 
@@ -55,12 +38,19 @@ export default function PropertiesListScreen({ navigation }) {
   const [saving, setSaving] = useState(false);
   const swipeableRefs = useRef({});
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    const list = getAllProperties();
-    const withStats = list.map((p) => ({ ...p, ...getPropertyStats(p.id) }));
-    setProperties(withStats);
-    setLoading(false);
+    try {
+      const list = await getAllProperties();
+      const withStats = await Promise.all(
+        list.map(async (p) => ({ ...p, ...(await getPropertyStats(p.id)) }))
+      );
+      setProperties(withStats);
+    } catch (err) {
+      console.error('Properties load error:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -96,9 +86,13 @@ export default function PropertiesListScreen({ navigation }) {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            deleteProperty(property.id);
-            load();
+          onPress: async () => {
+            try {
+              await deleteProperty(property.id);
+              await load();
+            } catch (err) {
+              Alert.alert('Error', err?.message ?? 'Failed to delete property.');
+            }
           },
         },
       ]
@@ -113,14 +107,14 @@ export default function PropertiesListScreen({ navigation }) {
     setSaving(true);
     try {
       if (editingProperty) {
-        updateProperty(editingProperty.id, {
+        await updateProperty(editingProperty.id, {
           name: form.name.trim(),
           address: form.address.trim() || null,
           city: form.city.trim() || null,
           description: form.description.trim() || null,
         });
       } else {
-        insertProperty({
+        await insertProperty({
           name: form.name.trim(),
           address: form.address.trim() || null,
           city: form.city.trim() || null,
@@ -128,7 +122,9 @@ export default function PropertiesListScreen({ navigation }) {
         });
       }
       setModalVisible(false);
-      load();
+      await load();
+    } catch (err) {
+      setFormError(err?.message ?? 'Failed to save property.');
     } finally {
       setSaving(false);
     }

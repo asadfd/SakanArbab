@@ -100,7 +100,7 @@ function MonthYearModal({ visible, value, onConfirm, onClose }) {
             <View style={[styles.datePickerCol, { flex: 2 }]}>
               <Text style={styles.datePickerColLabel}>Month</Text>
               <View style={styles.pickerWrapper}>
-                <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                   {MONTHS.map((m, i) => <Picker.Item key={m} label={m} value={i + 1} />)}
                 </Picker>
               </View>
@@ -108,7 +108,7 @@ function MonthYearModal({ visible, value, onConfirm, onClose }) {
             <View style={styles.datePickerCol}>
               <Text style={styles.datePickerColLabel}>Year</Text>
               <View style={styles.pickerWrapper}>
-                <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                   {YEARS.map((y) => <Picker.Item key={y} label={String(y)} value={y} />)}
                 </Picker>
               </View>
@@ -179,7 +179,7 @@ function DatePickerField({ value, onChange, error }) {
               <View style={styles.datePickerCol}>
                 <Text style={styles.datePickerColLabel}>Day</Text>
                 <View style={styles.pickerWrapper}>
-                  <Picker selectedValue={tempDay} onValueChange={setTempDay} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                  <Picker selectedValue={tempDay} onValueChange={setTempDay} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                     {DAYS.map((d) => <Picker.Item key={d} label={String(d)} value={d} />)}
                   </Picker>
                 </View>
@@ -187,7 +187,7 @@ function DatePickerField({ value, onChange, error }) {
               <View style={styles.datePickerCol}>
                 <Text style={styles.datePickerColLabel}>Month</Text>
                 <View style={styles.pickerWrapper}>
-                  <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                  <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                     {MONTHS.map((m, i) => <Picker.Item key={m} label={m.slice(0,3)} value={i + 1} />)}
                   </Picker>
                 </View>
@@ -195,7 +195,7 @@ function DatePickerField({ value, onChange, error }) {
               <View style={styles.datePickerCol}>
                 <Text style={styles.datePickerColLabel}>Year</Text>
                 <View style={styles.pickerWrapper}>
-                  <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                  <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                     {YEARS.map((y) => <Picker.Item key={y} label={String(y)} value={y} />)}
                   </Picker>
                 </View>
@@ -289,20 +289,20 @@ function ExpenseModal({ visible, editingExpense, propertyId, onSaved, onClose })
     return e;
   }
 
-  function handleSave() {
+  async function handleSave() {
     const e = validate();
     if (Object.keys(e).length > 0) { setErrors(e); return; }
     setSaving(true);
     try {
       if (editingExpense) {
-        updateExpense(editingExpense.id, {
+        await updateExpense(editingExpense.id, {
           category:     form.category,
           amount:       parseFloat(form.amount),
           expense_date: form.date,
           description:  form.description.trim() || null,
         });
       } else {
-        insertExpense({
+        await insertExpense({
           property_id:  propertyId,
           category:     form.category,
           amount:       parseFloat(form.amount),
@@ -311,6 +311,9 @@ function ExpenseModal({ visible, editingExpense, propertyId, onSaved, onClose })
         });
       }
       onSaved();
+    } catch (err) {
+      console.error('[ExpensesScreen] save error:', err);
+      Alert.alert('Error', err?.message ?? 'Failed to save expense.');
     } finally {
       setSaving(false);
     }
@@ -332,7 +335,7 @@ function ExpenseModal({ visible, editingExpense, propertyId, onSaved, onClose })
                 selectedValue={form.category}
                 onValueChange={(v) => setForm((f) => ({ ...f, category: v }))}
                 style={styles.picker}
-                mode="dialog"
+                mode="dropdown"
                 dropdownIconColor="#26215C"
               >
                 {CATEGORIES.map((c) => <Picker.Item key={c} label={c} value={c} />)}
@@ -407,22 +410,34 @@ export default function ExpensesScreen() {
   // ─── Load properties on mount ──────────────────────────────────────────────
 
   useFocusEffect(useCallback(() => {
-    const props = getAllProperties();
-    setProperties(props);
-    if (props.length > 0 && !selectedPropertyId) {
-      setSelectedPropertyId(props[0].id);
-    }
-    const a = getAgent();
-    setCurrency(a?.currency ?? 'AED');
+    (async () => {
+      try {
+        const [props, a] = await Promise.all([getAllProperties(), getAgent()]);
+        setProperties(props ?? []);
+        if (props && props.length > 0 && !selectedPropertyId) {
+          setSelectedPropertyId(props[0].id);
+        }
+        setCurrency(a?.currency ?? 'AED');
+      } catch (err) {
+        console.error('[ExpensesScreen] properties load error:', err);
+      }
+    })();
   }, []));
 
   // ─── Load expenses when property or month changes ──────────────────────────
 
-  const loadExpenses = useCallback(() => {
+  const loadExpenses = useCallback(async () => {
     if (!selectedPropertyId) { setExpenses([]); setLoading(false); return; }
     setLoading(true);
-    setExpenses(getExpensesByPropertyAndMonth(selectedPropertyId, filterMonth));
-    setLoading(false);
+    try {
+      const list = await getExpensesByPropertyAndMonth(selectedPropertyId, filterMonth);
+      setExpenses(list ?? []);
+    } catch (err) {
+      console.error('[ExpensesScreen] expenses load error:', err);
+      setExpenses([]);
+    } finally {
+      setLoading(false);
+    }
   }, [selectedPropertyId, filterMonth]);
 
   useFocusEffect(useCallback(() => { loadExpenses(); }, [loadExpenses]));
@@ -455,9 +470,14 @@ export default function ExpensesScreen() {
     setExpenseModalOpen(true);
   }
 
-  function handleDelete(id) {
-    deleteExpense(id);
-    loadExpenses();
+  async function handleDelete(id) {
+    try {
+      await deleteExpense(id);
+      loadExpenses();
+    } catch (err) {
+      console.error('[ExpensesScreen] delete error:', err);
+      Alert.alert('Error', err?.message ?? 'Failed to delete expense.');
+    }
   }
 
   function onExpenseSaved() {

@@ -101,7 +101,7 @@ function DatePickerField({ label, required, value, onChange, placeholder, error 
                     selectedValue={tempDay}
                     onValueChange={setTempDay}
                     style={styles.picker}
-                    mode="dialog"
+                    mode="dropdown"
                     dropdownIconColor="#26215C"
                   >
                     {DAYS.map((d) => <Picker.Item key={d} label={String(d)} value={d} />)}
@@ -115,7 +115,7 @@ function DatePickerField({ label, required, value, onChange, placeholder, error 
                     selectedValue={tempMonth}
                     onValueChange={setTempMonth}
                     style={styles.picker}
-                    mode="dialog"
+                    mode="dropdown"
                     dropdownIconColor="#26215C"
                   >
                     {MONTHS.map((m, i) => <Picker.Item key={m} label={m} value={i + 1} />)}
@@ -129,7 +129,7 @@ function DatePickerField({ label, required, value, onChange, placeholder, error 
                     selectedValue={tempYear}
                     onValueChange={setTempYear}
                     style={styles.picker}
-                    mode="dialog"
+                    mode="dropdown"
                     dropdownIconColor="#26215C"
                   >
                     {YEARS.map((y) => <Picker.Item key={y} label={String(y)} value={y} />)}
@@ -183,39 +183,43 @@ export default function CreateContractScreen({ navigation, route }) {
   // ─── Load agent + available beds on mount ───────────────────────────────────
 
   useEffect(() => {
-    try {
-      const a = getAgent();
-      setAgent(a);
-      setCurrency(a?.currency ?? 'AED');
+    (async () => {
+      try {
+        const a = await getAgent();
+        setAgent(a);
+        setCurrency(a?.currency ?? 'AED');
 
-      if (!routeBedId) {
-        const beds = getAvailableBeds();
-        setAvailableBeds(beds ?? []);
-        if (beds && beds.length > 0) setSelectedBedId(beds[0].id);
+        if (!routeBedId) {
+          const beds = await getAvailableBeds();
+          setAvailableBeds(beds ?? []);
+          if (beds && beds.length > 0) setSelectedBedId(beds[0].id);
+        }
+      } catch (err) {
+        console.error('[CreateContractScreen] init error:', err);
+        setLoadError(err.message ?? 'Failed to load data');
       }
-    } catch (err) {
-      console.error('[CreateContractScreen] init error:', err);
-      setLoadError(err.message ?? 'Failed to load data');
-    }
+    })();
   }, []);
 
   // ─── Load bed info when selectedBedId changes ───────────────────────────────
 
   useEffect(() => {
     if (!selectedBedId) { setBed(null); setRoom(null); setProperty(null); return; }
-    try {
-      const b = getBedById(selectedBedId);
-      setBed(b);
-      if (b) {
-        const r = getRoomById(b.room_id);
-        setRoom(r);
-        setProperty(r ? getPropertyById(r.property_id) : null);
-        setMonthlyRent(b.actual_rent != null ? String(b.actual_rent) : '');
+    (async () => {
+      try {
+        const b = await getBedById(selectedBedId);
+        setBed(b);
+        if (b) {
+          const r = await getRoomById(b.room_id);
+          setRoom(r);
+          setProperty(r ? await getPropertyById(r.property_id) : null);
+          setMonthlyRent(b.actual_rent != null ? String(b.actual_rent) : '');
+        }
+      } catch (err) {
+        console.error('[CreateContractScreen] bed load error:', err);
+        setLoadError(err.message ?? 'Failed to load bed details');
       }
-    } catch (err) {
-      console.error('[CreateContractScreen] bed load error:', err);
-      setLoadError(err.message ?? 'Failed to load bed details');
-    }
+    })();
   }, [selectedBedId]);
 
   // ─── Validation ─────────────────────────────────────────────────────────────
@@ -246,7 +250,7 @@ export default function CreateContractScreen({ navigation, route }) {
 
     try {
       // 1. Insert contract
-      const result = insertContract({
+      const result = await insertContract({
         bed_unit_id:    selectedBedId,
         agent_id:       agent?.id,
         tenant_name:    tenantName.trim(),
@@ -260,13 +264,13 @@ export default function CreateContractScreen({ navigation, route }) {
         payment_due_day: parseInt(paymentDueDay, 10),
         notes:          notes.trim() || null,
       });
-      const contractId = result.lastInsertRowId;
+      const contractId = result.id;
 
       // 2. Mark bed as OCCUPIED
-      updateBedStatus(selectedBedId, 'OCCUPIED');
+      await updateBedStatus(selectedBedId, 'OCCUPIED');
 
       // 3. Generate pending payment records for each month
-      generatePendingPayments(contractId);
+      await generatePendingPayments(contractId);
 
       const contractData = {
         id:              contractId,
@@ -294,7 +298,7 @@ export default function CreateContractScreen({ navigation, route }) {
         setStatusMsg('Sending email to tenant...');
         try {
           await sendContractEmail(pdf, contractData, agent);
-          insertEmailLog({
+          await insertEmailLog({
             type:            'CONTRACT',
             tenancy_id:      contractId,
             recipient_email: tenantEmail.trim(),
@@ -307,7 +311,7 @@ export default function CreateContractScreen({ navigation, route }) {
             { text: 'OK', onPress: () => navigation.goBack() },
           ]);
         } catch {
-          insertEmailLog({
+          await insertEmailLog({
             type:            'CONTRACT',
             tenancy_id:      contractId,
             recipient_email: tenantEmail.trim(),
@@ -323,7 +327,7 @@ export default function CreateContractScreen({ navigation, route }) {
           );
         }
       } else {
-        insertEmailLog({
+        await insertEmailLog({
           type:            'CONTRACT',
           tenancy_id:      contractId,
           recipient_email: tenantEmail.trim(),

@@ -10,8 +10,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
-import { getAgent } from '../../database/database';
-import db from '../../database/database';
+import { getAgent, getOverdueTenantsWithDetails } from '../../database/database';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -35,39 +34,6 @@ function formatAmount(amount) {
   });
 }
 
-// ─── Data loader ─────────────────────────────────────────────────────────────
-
-function loadOverdue() {
-  const now = new Date();
-  const today = now.getDate();
-  const monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-  return db.getAllSync(
-    `SELECT
-       tc.id           AS contract_id,
-       tc.tenant_name,
-       tc.monthly_rent,
-       tc.payment_due_day,
-       bu.bed_label,
-       r.name          AS room_name,
-       p.name          AS property_name
-     FROM tenancy_contracts tc
-     JOIN bed_units bu  ON bu.id  = tc.bed_unit_id
-     JOIN rooms r       ON r.id   = bu.room_id
-     JOIN properties p  ON p.id   = r.property_id
-     WHERE tc.status = 'ACTIVE'
-       AND ? > tc.payment_due_day
-       AND NOT EXISTS (
-         SELECT 1 FROM payments pay
-         WHERE pay.tenancy_id      = tc.id
-           AND pay.payment_for_month = ?
-           AND pay.status           = 'PAID'
-       )
-     ORDER BY tc.payment_due_day ASC`,
-    [today, monthYear]
-  );
-}
-
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function OverdueScreen({ navigation }) {
@@ -77,11 +43,24 @@ export default function OverdueScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
-      const agent = getAgent();
-      setCurrency(agent?.currency ?? 'AED');
-      setTenants(loadOverdue());
-      setLoading(false);
+      let cancelled = false;
+      (async () => {
+        setLoading(true);
+        try {
+          const [agent, overdue] = await Promise.all([
+            getAgent(),
+            getOverdueTenantsWithDetails(),
+          ]);
+          if (cancelled) return;
+          setCurrency(agent?.currency ?? 'AED');
+          setTenants(overdue);
+        } catch (err) {
+          console.error('Overdue load error:', err);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
+      return () => { cancelled = true; };
     }, [])
   );
 

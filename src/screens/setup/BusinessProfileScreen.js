@@ -13,9 +13,9 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as SecureStore from 'expo-secure-store';
 import { Picker } from '@react-native-picker/picker';
 import { updateAgentProfile, getAgent } from '../../database/database';
+import { logOut } from '../../services/authService';
 import { CURRENCIES } from '../../constants/currencies';
 
 function getInitials(businessName) {
@@ -43,16 +43,20 @@ export default function BusinessProfileScreen({ navigation, route }) {
 
   // Pre-fill if editing from Settings
   useEffect(() => {
-    const agent = getAgent();
-    if (!agent) return;
-    if (agent.business_logo_uri) setLogoUri(agent.business_logo_uri);
-    if (agent.business_name) setBusinessName(agent.business_name);
-    if (agent.currency) setCurrency(agent.currency);
-    if (agent.business_phone) setPhone(agent.business_phone);
-    if (agent.business_email) setEmail(agent.business_email);
-    if (agent.business_address) setAddress(agent.business_address);
-    if (agent.business_tagline) setTagline(agent.business_tagline);
-    if (agent.business_trn) setTrn(agent.business_trn);
+    (async () => {
+      try {
+        const agent = await getAgent();
+        if (!agent) return;
+        if (agent.business_logo_uri) setLogoUri(agent.business_logo_uri);
+        if (agent.business_name) setBusinessName(agent.business_name);
+        if (agent.currency) setCurrency(agent.currency);
+        if (agent.business_phone) setPhone(agent.business_phone);
+        if (agent.business_email) setEmail(agent.business_email);
+        if (agent.business_address) setAddress(agent.business_address);
+        if (agent.business_tagline) setTagline(agent.business_tagline);
+        if (agent.business_trn) setTrn(agent.business_trn);
+      } catch {}
+    })();
   }, []);
 
   async function pickLogo() {
@@ -104,7 +108,7 @@ export default function BusinessProfileScreen({ navigation, route }) {
         }
       }
 
-      updateAgentProfile({
+      await updateAgentProfile({
         business_name: businessName.trim(),
         business_logo_uri: savedLogoUri,
         business_phone: phone.trim() || null,
@@ -128,7 +132,9 @@ export default function BusinessProfileScreen({ navigation, route }) {
   }
 
   async function handleReset() {
-    await SecureStore.deleteItemAsync('app_pin');
+    try {
+      await logOut();
+    } catch {}
     navigation.replace('Auth');
   }
 

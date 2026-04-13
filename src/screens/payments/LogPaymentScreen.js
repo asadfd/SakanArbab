@@ -122,7 +122,7 @@ function DatePickerField({ label, required, value, onChange, error }) {
               <View style={styles.datePickerCol}>
                 <Text style={styles.datePickerColLabel}>Day</Text>
                 <View style={styles.pickerWrapper}>
-                  <Picker selectedValue={tempDay} onValueChange={setTempDay} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                  <Picker selectedValue={tempDay} onValueChange={setTempDay} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                     {DAYS.map((d) => <Picker.Item key={d} label={String(d)} value={d} />)}
                   </Picker>
                 </View>
@@ -130,7 +130,7 @@ function DatePickerField({ label, required, value, onChange, error }) {
               <View style={styles.datePickerCol}>
                 <Text style={styles.datePickerColLabel}>Month</Text>
                 <View style={styles.pickerWrapper}>
-                  <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                  <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                     {MONTHS.map((m, i) => <Picker.Item key={m} label={m.slice(0,3)} value={i + 1} />)}
                   </Picker>
                 </View>
@@ -138,7 +138,7 @@ function DatePickerField({ label, required, value, onChange, error }) {
               <View style={styles.datePickerCol}>
                 <Text style={styles.datePickerColLabel}>Year</Text>
                 <View style={styles.pickerWrapper}>
-                  <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                  <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                     {YEARS.map((y) => <Picker.Item key={y} label={String(y)} value={y} />)}
                   </Picker>
                 </View>
@@ -204,7 +204,7 @@ function MonthYearPickerField({ label, required, value, onChange, error }) {
               <View style={[styles.datePickerCol, { flex: 2 }]}>
                 <Text style={styles.datePickerColLabel}>Month</Text>
                 <View style={styles.pickerWrapper}>
-                  <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                  <Picker selectedValue={tempMonth} onValueChange={setTempMonth} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                     {MONTHS.map((m, i) => <Picker.Item key={m} label={m} value={i + 1} />)}
                   </Picker>
                 </View>
@@ -212,7 +212,7 @@ function MonthYearPickerField({ label, required, value, onChange, error }) {
               <View style={styles.datePickerCol}>
                 <Text style={styles.datePickerColLabel}>Year</Text>
                 <View style={styles.pickerWrapper}>
-                  <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} mode="dialog" dropdownIconColor="#26215C">
+                  <Picker selectedValue={tempYear} onValueChange={setTempYear} style={styles.picker} mode="dropdown" dropdownIconColor="#26215C">
                     {YEARS.map((y) => <Picker.Item key={y} label={String(y)} value={y} />)}
                   </Picker>
                 </View>
@@ -261,15 +261,21 @@ export default function LogPaymentScreen({ navigation, route }) {
   // ─── Load agent + contracts on mount ────────────────────────────────────────
 
   useEffect(() => {
-    const a = getAgent();
-    setAgent(a);
-    setCurrency(a?.currency ?? 'AED');
+    (async () => {
+      try {
+        const a = await getAgent();
+        setAgent(a);
+        setCurrency(a?.currency ?? 'AED');
 
-    if (!routeContractId) {
-      const list = getAllContractsWithDetails('ACTIVE');
-      setActiveContracts(list);
-      if (list.length > 0) setSelectedContractId(list[0].id);
-    }
+        if (!routeContractId) {
+          const list = await getAllContractsWithDetails('ACTIVE');
+          setActiveContracts(list ?? []);
+          if (list && list.length > 0) setSelectedContractId(list[0].id);
+        }
+      } catch (err) {
+        console.error('[LogPaymentScreen] init error:', err);
+      }
+    })();
   }, []);
 
   // ─── Load contract details when selectedContractId changes ──────────────────
@@ -286,18 +292,25 @@ export default function LogPaymentScreen({ navigation, route }) {
     }
 
     // Loaded from route param — need to enrich with bed/room/property names
-    const c = getContractById(selectedContractId);
-    if (!c) { setContract(null); return; }
-    const bed      = getBedById(c.bed_unit_id);
-    const room     = bed ? getRoomById(bed.room_id) : null;
-    const property = room ? getPropertyById(room.property_id) : null;
-    setContract({
-      ...c,
-      bed_label:     bed?.bed_label ?? '—',
-      room_name:     room?.name ?? '—',
-      property_name: property?.name ?? '—',
-    });
-    setAmount(c.monthly_rent != null ? String(c.monthly_rent) : '');
+    (async () => {
+      try {
+        const c = await getContractById(selectedContractId);
+        if (!c) { setContract(null); return; }
+        const bed      = await getBedById(c.bed_unit_id);
+        const room     = bed ? await getRoomById(bed.room_id) : null;
+        const property = room ? await getPropertyById(room.property_id) : null;
+        setContract({
+          ...c,
+          bed_label:     bed?.bed_label ?? '—',
+          room_name:     room?.name ?? '—',
+          property_name: property?.name ?? '—',
+        });
+        setAmount(c.monthly_rent != null ? String(c.monthly_rent) : '');
+      } catch (err) {
+        console.error('[LogPaymentScreen] contract load error:', err);
+        setContract(null);
+      }
+    })();
   }, [selectedContractId]);
 
   // ─── Real-time txn duplicate check ──────────────────────────────────────────
@@ -307,9 +320,13 @@ export default function LogPaymentScreen({ navigation, route }) {
     setTxnError('');
     clearTimeout(txnCheckTimer.current);
     if (!val.trim()) return;
-    txnCheckTimer.current = setTimeout(() => {
-      if (checkTxnExists(val.trim())) {
-        setTxnError('Transaction number already used');
+    txnCheckTimer.current = setTimeout(async () => {
+      try {
+        if (await checkTxnExists(val.trim())) {
+          setTxnError('Transaction number already used');
+        }
+      } catch (err) {
+        console.error('[LogPaymentScreen] txn check error:', err);
       }
     }, 400);
   }
@@ -320,7 +337,7 @@ export default function LogPaymentScreen({ navigation, route }) {
     const e = {};
     if (!selectedContractId)                    e.contract = 'Please select a contract';
     if (!txnNo.trim())                          e.txnNo = 'Transaction number is required';
-    else if (checkTxnExists(txnNo.trim()))      e.txnNo = 'Transaction number already used';
+    else if (txnError)                          e.txnNo = txnError;
     const amt = parseFloat(amount);
     if (!amount || isNaN(amt) || amt <= 0)      e.amount = 'Amount must be greater than 0';
     if (!paymentDate)                           e.paymentDate = 'Payment date is required';
@@ -339,8 +356,17 @@ export default function LogPaymentScreen({ navigation, route }) {
     setStatusMsg('Saving payment...');
 
     try {
+      // Final duplicate txn check
+      if (await checkTxnExists(txnNo.trim())) {
+        setTxnError('Transaction number already used');
+        setErrors((e) => ({ ...e, txnNo: 'Transaction number already used' }));
+        setSaving(false);
+        setStatusMsg('');
+        return;
+      }
+
       // 1. Check if a PENDING payment already exists for this contract+month
-      const existingPending = getPendingPaymentForMonth(contract.id, paymentForMonth);
+      const existingPending = await getPendingPaymentForMonth(contract.id, paymentForMonth);
 
       const paymentData = {
         tenancy_id:        contract.id,
@@ -357,7 +383,7 @@ export default function LogPaymentScreen({ navigation, route }) {
 
       if (existingPending) {
         // Update the existing PENDING payment instead of creating a duplicate
-        updatePaymentToPaid(existingPending.id, {
+        await updatePaymentToPaid(existingPending.id, {
           txn_no:       txnNo.trim(),
           amount:       parseFloat(amount),
           payment_date: paymentDate,
@@ -365,7 +391,7 @@ export default function LogPaymentScreen({ navigation, route }) {
           notes:        notes.trim() || null,
         });
       } else {
-        insertPayment(paymentData);
+        await insertPayment(paymentData);
       }
 
       // 2. Generate receipt PDF
@@ -379,7 +405,7 @@ export default function LogPaymentScreen({ navigation, route }) {
         setStatusMsg('Sending receipt email...');
         try {
           await sendReceiptEmail(pdf, paymentData, contract, agent);
-          insertEmailLog({
+          await insertEmailLog({
             type:            'RECEIPT',
             tenancy_id:      contract.id,
             recipient_email: contract.tenant_email,
@@ -392,7 +418,7 @@ export default function LogPaymentScreen({ navigation, route }) {
             { text: 'OK', onPress: () => navigation.goBack() },
           ]);
         } catch {
-          insertEmailLog({
+          await insertEmailLog({
             type:            'RECEIPT',
             tenancy_id:      contract.id,
             recipient_email: contract.tenant_email,
@@ -407,7 +433,7 @@ export default function LogPaymentScreen({ navigation, route }) {
         }
       } else {
         if (contract.tenant_email) {
-          insertEmailLog({
+          await insertEmailLog({
             type:            'RECEIPT',
             tenancy_id:      contract.id,
             recipient_email: contract.tenant_email,
