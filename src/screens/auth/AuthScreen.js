@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signUp, logIn, resetPassword } from '../../services/authService';
-import { setupDatabase, saveLocalAgent, getAgent } from '../../database/database';
 
 export default function AuthScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -42,10 +41,8 @@ export default function AuthScreen({ navigation }) {
       } else {
         await signUp(trimmedEmail, password);
       }
-      await setupDatabase();
-      await saveLocalAgent();
-      const agent = await getAgent();
-      navigation.replace(agent?.business_name ? 'Main' : 'Setup');
+      // AppNavigator's onAuthStateChange handler picks up SIGNED_IN
+      // and swaps the navigator stack automatically.
     } catch (err) {
       const msg = err?.message ?? 'Something went wrong';
       if (msg.includes('Invalid login')) {

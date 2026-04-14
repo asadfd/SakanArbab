@@ -10,37 +10,43 @@ import BusinessProfileScreen from '../screens/setup/BusinessProfileScreen';
 const Root = createNativeStackNavigator();
 
 export default function AppNavigator() {
-  const [initialRoute, setInitialRoute] = useState(null); // null = loading
-  const [remountKey, setRemountKey] = useState(0);
+  const [bootState, setBootState] = useState({ loading: true });
 
-  async function resolveRoute() {
+  async function resolveState(sessionOverride) {
     try {
-      const session = await getSession();
-      if (!session) return 'Auth';
+      const session = sessionOverride ?? (await getSession());
+      if (!session) return { loading: false, signedIn: false };
 
       await setupDatabase();
       await saveLocalAgent();
 
       const agent = await getAgent();
-      return agent?.business_name ? 'Main' : 'Setup';
+      return {
+        loading: false,
+        signedIn: true,
+        initialRoute: agent?.business_name ? 'Main' : 'Setup',
+      };
     } catch {
-      return 'Auth';
+      return { loading: false, signedIn: false };
     }
   }
 
   useEffect(() => {
     let mounted = true;
+
     (async () => {
-      const route = await resolveRoute();
-      if (mounted) setInitialRoute(route);
+      const state = await resolveState();
+      if (mounted) setBootState(state);
     })();
 
-    const { data: sub } = onAuthStateChange((event) => {
+    const { data: sub } = onAuthStateChange(async (event, session) => {
       if (!mounted) return;
       if (event === 'SIGNED_OUT') {
         clearUserId();
-        setInitialRoute('Auth');
-        setRemountKey((k) => k + 1);
+        setBootState({ loading: false, signedIn: false });
+      } else if (event === 'SIGNED_IN' && session) {
+        const state = await resolveState(session);
+        if (mounted) setBootState(state);
       }
     });
 
@@ -50,7 +56,7 @@ export default function AppNavigator() {
     };
   }, []);
 
-  if (!initialRoute) {
+  if (bootState.loading) {
     return (
       <View style={styles.loader}>
         <ActivityIndicator size="large" color="#26215C" />
@@ -60,13 +66,21 @@ export default function AppNavigator() {
 
   return (
     <Root.Navigator
-      key={`nav-${remountKey}`}
-      initialRouteName={initialRoute}
       screenOptions={{ headerShown: false, animation: 'none' }}
     >
-      <Root.Screen name="Auth" component={AuthScreen} />
-      <Root.Screen name="Setup" component={BusinessProfileScreen} />
-      <Root.Screen name="Main" component={TabNavigator} />
+      {!bootState.signedIn ? (
+        <Root.Screen name="Auth" component={AuthScreen} />
+      ) : bootState.initialRoute === 'Main' ? (
+        <>
+          <Root.Screen name="Main" component={TabNavigator} />
+          <Root.Screen name="Setup" component={BusinessProfileScreen} />
+        </>
+      ) : (
+        <>
+          <Root.Screen name="Setup" component={BusinessProfileScreen} />
+          <Root.Screen name="Main" component={TabNavigator} />
+        </>
+      )}
     </Root.Navigator>
   );
 }

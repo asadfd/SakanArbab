@@ -135,7 +135,6 @@ export default function BusinessProfileScreen({ navigation, route }) {
     try {
       await logOut();
     } catch {}
-    navigation.replace('Auth');
   }
 
   const initials = getInitials(businessName);

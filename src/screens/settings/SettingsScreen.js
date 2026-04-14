@@ -19,12 +19,6 @@ function MenuItem({ icon, color, bg, label, subtitle, onPress }) {
 }
 
 export default function SettingsScreen({ navigation }) {
-  function rootNav() {
-    let nav = navigation;
-    while (nav.getParent && nav.getParent()) nav = nav.getParent();
-    return nav;
-  }
-
   function handleSignOut() {
     Alert.alert(
       'Sign Out',
@@ -37,7 +31,6 @@ export default function SettingsScreen({ navigation }) {
           onPress: async () => {
             try {
               await logOut();
-              rootNav().replace('Auth');
             } catch (err) {
               Alert.alert('Error', err?.message ?? 'Failed to sign out.');
             }

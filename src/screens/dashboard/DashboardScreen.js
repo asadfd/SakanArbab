@@ -50,8 +50,13 @@ function formatDate(dateStr) {
 
 // ─── Data loader ─────────────────────────────────────────────────────────────
 
+let _monthlyPaymentsEnsured = false;
+
 async function loadDashboardData() {
-  await ensureMonthlyPayments();
+  if (!_monthlyPaymentsEnsured) {
+    await ensureMonthlyPayments();
+    _monthlyPaymentsEnsured = true;
+  }
 
   const [agent, stats, overdueList, thisMonthPayments, recentPayments] = await Promise.all([
     getAgent(),
@@ -80,16 +85,21 @@ async function loadDashboardData() {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+const STALE_MS = 30_000;
+
 export default function DashboardScreen({ navigation }) {
   const [data, setData] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const lastLoadedAtRef = React.useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
+    if (!force && Date.now() - lastLoadedAtRef.current < STALE_MS) return;
     try {
       setLoadError(null);
       const result = await loadDashboardData();
       setData(result);
+      lastLoadedAtRef.current = Date.now();
     } catch (err) {
       console.error('Dashboard load error:', err);
       setLoadError(err?.message ?? 'Failed to load dashboard.');
@@ -104,7 +114,7 @@ export default function DashboardScreen({ navigation }) {
 
   async function onRefresh() {
     setRefreshing(true);
-    await load();
+    await load(true);
     setRefreshing(false);
   }
 
